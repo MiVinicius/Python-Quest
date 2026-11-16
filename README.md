@@ -1,141 +1,130 @@
-# 🐍 Python Quest (V0.3)
+# 🐍 Python Quest
 
-> **Sorte no dado, lógica nos blocos, estratégia nas cartas e duelos P2P online.**  
-> Uma corrida de 64 casas com programação visual hierárquica em blocos traduzida para Python em tempo real, enfrentando bots inteligentes ou outros jogadores via Matchmaking Automático (**Partida Rápida**) e salas privadas.
+**Python Quest** é um jogo de tabuleiro digital educativo que combina corrida em trilha com **programação visual em blocos** traduzida em tempo real para **Python**.
 
----
+🌐 **Jogue online:** [https://mivinicius.github.io/python-quest/](https://mivinicius.github.io/python-quest/)
 
-## 🌟 Destaques da Versão 0.3
-
-- 🎯 **Novo Modo Demonstração (22 Casas vs Robô)**: Versão compacta de avaliação rápida (3 corredores em zigue-zague com alta densidade de desafios, atalhos e bugs), projetada para que avaliadores experimentem todas as mecânicas do jogo contra a IA em 2 a 3 minutos.
-- 🏠 **Tela Inicial de Criar Conta / Login & Menu Hub Limpo**: Primeira página dedicada à criação de conta/login (com opção rápida para continuar sessão ou modo convidado), menu central focado nos modos de jogo (*Demonstração*, *Jogar Solo vs CPU*, *Multiplayer Online* e *Como Jogar*) e menu de **Perfil Superior Direito** concentrando *Meu Perfil* e *Histórico & Estatísticas*.
-- 🔐 **Contas de Jogador (SHA-256) & Backup Portátil (`.json`)**: Crie múltiplos perfis protegidos por senha criptografada (`Web Crypto API`), desbloqueie conquistas, escolha entre 5 avatares (🐍 Cyber Snake, 🤖 Bit Bot, 🦊 Algo Fox, 🦅 Binary Falcon e 🐱 Terminal Cat) e exporte/importe seu progresso em `.json` para jogar em qualquer dispositivo.
-- 🧩 **Árvore Sintática (AST) Hierárquica de Blocos**:
-  - **🔁 Loop `for` (`for i in range(N):`)**: Suporta aninhamento real (`for` dentro de `for` com variáveis `i, j, k, n` por escopo).
-  - **🔀 Condicional `if`**: Avaliação em tempo real com *Live Badge* (`🟢 True` / `⚪ False`) para `dado % 2 == 0`, `dado % 2 != 0`, `oponente.a_frente` e `proxima_casa.tem_bug()`, concedendo **+1 passo bônus tático** quando verdadeira.
-  - **➡️ Avançar (`player.avancar(N)`)**: Movimento padrão pela trilha.
-  - **🦘 Pular (`player.pular(distancia=N)`)**: Salto acrobático que evita armadilhas (Bugs) na casa de pouso.
-  - **🛡️ Escudo (`try: player.ativar_escudo() except BugTrapException: pass`)**: Blindagem que anula 100% o recuo do próximo Bug.
-- 👁️ **Modo Espectador Duplo & Janela Flutuante Arrastável**: Durante o turno do oponente (CPU ou jogador online), acompanhe em tempo real a rolagem do dado, a montagem dos blocos, o código Python com *Syntax Highlighting* e veja o adversário analisando e respondendo às alternativas dos Desafios ao vivo!
-- 🃏 **Cards de Desafios 3D Colecionáveis (45 Questões Balanceadas)**: Ao cair em casas de desafio, escolha entre 3 cartas holográficas categorizadas do catálogo (`🟢 Comum +2`, `🔵 Rara +4` e `🟣 Épica +6`), com **45 desafios reais de Python** (15 Fáceis, 15 Médios e 15 Difíceis) e sorteio inteligente sem repetição na partida.
-- ⚡ **Multiplayer Serverless P2P (Partida Rápida + Salas `PY-XXXX`)**: Duelos síncronos em tempo real via **WebRTC DataChannel (PeerJS)** entre computadores diferentes e **BroadcastChannel** (`< 1ms`) entre abas locais — **100% compatível com GitHub Pages e sem necessidade de configurar banco de dados externo**.
+O jogador avança pelo tabuleiro montando pequenos algoritmos (usando loops `for`, condicionais `if`, desvios de armadilhas e escudos `try/except`) com base na energia obtida no dado, além de responder desafios de código Python para ganhar bônus de movimento.
 
 ---
 
-## 🎯 Mecânicas Centrais do Jogo
+## 🎮 Modos de Jogo
 
-1. **A Energia do Dado e a Compilação de Blocos:**
-   - No início do turno, role o dado D6 para gerar sua **energia de passos**.
-   - Arraste ou clique nos blocos da paleta para construir seu algoritmo (combinando loops `for`, condicionais `if`, avanços, pulos e escudos).
-   - O compilador avalia recursivamente a árvore de blocos (`evaluateTree`), verifica se o total de passos bate com a energia do dado e traduz tudo para código Python PEP 8 com *Syntax Highlighting*.
-
-2. **A Trilha em Zigue-Zague Descendente (64 Casas ou 22 Casas no Modo Demonstração):**
-   - ⚡ **Atalhos (+3/+4 casas):** Impulsionam seu peão à frente.
-   - 🐛 **Bugs (-3/-5 casas):** Provocam erro e recuo (anulados se você usar **Pular** ou tiver um **Escudo `try/except`** ativo!).
-   - ❓ **Casas de Desafio:** Escolha uma carta 3D e resolva o problema de código Python no modo *Time Attack* (25s).
-   - 🏆 **Meta (Casa 64 ou Casa 22 na Demo):** O primeiro a alcançar a casa final conquista o título de *Python Master*.
+- **Demonstração (22 casas vs Robô):** versão compacta para testar todas as mecânicas em poucos minutos.
+- **Solo vs CPU (64 casas):** partida completa contra o bot com três níveis de dificuldade (*Iniciante*, *Equilibrada* e *Mestre*).
+- **Multiplayer Online (P2P):** partidas em tempo real via WebRTC (PeerJS) ou entre abas locais (`BroadcastChannel`), por **Partida Rápida** ou **Sala Privada (`PY-XXXX`)**.
 
 ---
 
-## 🏛️ Arquitetura do Projeto: Model-View-Controller (MVC)
+## 🕹️ Como Jogar
 
-O projeto é estruturado como uma **Single Page Application (SPA)** em **Vanilla JavaScript (ES Modules)**, pronta para hospedagem estática direta no **GitHub Pages**:
+1. **Role o dado:** no início do turno, o dado D6 define a quantidade exata de passos base que o seu algoritmo precisa somar.
+2. **Monte seu algoritmo com blocos:**
+   - **Avançar (`avancar(N)`):** move o peão normalmente pela trilha.
+   - **Pular (`pular(N)`):** salta sobre a casa de destino evitando Bugs.
+   - **Loop `for`:** repete os blocos internos `N` vezes (aceita loops aninhados).
+   - **Condicional `if`:** avalia condições do turno (ex.: `dado % 2 == 0`, `oponente.a_frente`, `proxima_casa.tem_bug()`) e concede **+1 passo bônus** quando verdadeira.
+   - **Escudo (`try / except`):** protege contra o recuo do próximo Bug.
+3. **Execute o código:** quando o total de passos dos blocos corresponder ao valor do dado, execute o programa para mover o peão e visualizar o código Python equivalente.
+4. **Casas especiais do tabuleiro:**
+   - **⚡ Atalho:** avança casas extras.
+   - **🐛 Bug:** faz o peão recuar (anulado se você pular sobre a casa ou tiver um escudo ativo).
+   - **❓ Desafio:** abre 3 cartas de dificuldade (**Comum +2**, **Rara +4**, **Épica +6**) com uma pergunta de Python e tempo limite de 25 segundos.
+5. **Vitória:** vence quem chegar primeiro à casa final (**64** no modo padrão ou **22** na demonstração).
 
+---
+
+## ➕ Como Adicionar Novos Desafios
+
+As perguntas ficam no arquivo [`desafios.json`](./desafios.json), organizado em três níveis (`facil`, `medio` e `dificil` — atualmente com 45 questões).
+
+Para adicionar um novo desafio, insira um objeto seguindo este formato no array do `desafios.json`:
+
+```json
+{
+  "id": "py-046",
+  "categoria": "Compreensão de Conjuntos",
+  "dificuldade": "medio",
+  "pergunta": "Quantos elementos terá o conjunto resultante?",
+  "codigo": "s = {x % 3 for x in range(6)}\nprint(len(s))",
+  "opcoes": ["6", "3", "2", "1"],
+  "resposta_correta": 1,
+  "explicacao": "O operador % 3 gera os restos 0, 1 e 2. Como sets não armazenam duplicatas, restam 3 elementos.",
+  "autor": "@seu-usuario"
+}
 ```
+
+### Campos obrigatórios
+| Campo | Tipo | Descrição |
+| :--- | :--- | :--- |
+| `id` | `string` | Identificador único (ex.: `"py-046"`). |
+| `categoria` | `string` | Tema do desafio exibido na carta e no modal. |
+| `dificuldade` | `string` | `"facil"`, `"medio"` ou `"dificil"` (define em qual carta o desafio aparece). |
+| `pergunta` | `string` | Enunciado da questão. |
+| `codigo` | `string` | Trecho de código Python exibido ao jogador. |
+| `opcoes` | `string[]` | Lista com exatamente **4** alternativas. |
+| `resposta_correta` | `number` | Índice da alternativa correta (`0` a `3`). |
+| `explicacao` | `string` | Explicação exibida após a resposta. |
+| `autor` | `string` | Nome ou usuário de quem criou o desafio. |
+
+---
+
+## 🏛️ Arquitetura
+
+A aplicação é uma **SPA estática** construída em **HTML, CSS e JavaScript (ES Modules)** seguindo o padrão **MVC (Model-View-Controller)**, sem dependências de backend ou build.
+
+```text
 python-quest/
-├── .gitignore                     # Regras de exclusão do Git
-├── .nojekyll                      # Garante entrega direta dos módulos ES6 no GitHub Pages
-├── index.html                     # Esqueleto semântico da SPA
-├── README.md                      # Documentação completa
-├── DESIGN.md                      # Especificação de Design System ("Kinetic Terminal")
-├── desafios.json                  # Catálogo open-source com 45 questões Python (Fácil/Médio/Difícil)
+├── .gitignore
+├── .nojekyll                      # Habilita entrega direta de ES Modules no GitHub Pages
+├── index.html                     # Estrutura principal da aplicação
+├── desafios.json                  # Banco de desafios Python
+├── DESIGN.md                      # Guia visual da interface
 ├── css/
-│   ├── styles.css                 # Design System, tabuleiro, janela arrastável e syntax highlighting
-│   ├── blocks.css                 # Paleta e árvore hierárquica de blocos (for / if / ações)
-│   ├── home.css                   # Menu Hub, abas de autenticação e modais
-│   └── cards.css                  # Cards holográficos 3D de desafio
+│   ├── styles.css                 # Layout da arena, tabuleiro e terminal
+│   ├── blocks.css                 # Blocos de programação e área de montagem
+│   ├── home.css                   # Tela inicial, login/cadastro e modais
+│   └── cards.css                  # Cartas de seleção de desafio
 └── js/
-    ├── app.js                     # Ponto de entrada e injeção de dependências
+    ├── app.js                     # Inicialização e injeção de dependências
     ├── services/
-    │   └── AuthService.js         # Cofre local de contas (SHA-256) e portabilidade JSON
+    │   └── AuthService.js         # Autenticação local (SHA-256) e exportação/importação JSON
     ├── models/
-    │   ├── GameStateModel.js      # Estado reativo (posições, turnos, boosts, escudos)
-    │   ├── BoardModel.js          # Mapeamento do zigue-zague (64 casas padrão / 22 casas Demo)
-    │   ├── DiceModel.js           # Matemática do dado D6 e bônus
-    │   ├── BlockProgramModel.js   # AST hierárquica de blocos, avaliador e gerador Python
-    │   ├── BotModel.js            # IA da CPU (detecção de bugs, loops e desafios)
-    │   ├── ChallengeModel.js      # Catálogo e validação de respostas
-    │   ├── UserProfileModel.js    # Perfil, conquistas, streaks e backup JSON
-    │   └── OnlineMultiplayerModel.js # Matchmaking P2P (WebRTC PeerJS + BroadcastChannel)
+    │   ├── GameStateModel.js      # Estado da partida (turnos, posições, escudos e logs)
+    │   ├── BoardModel.js          # Geração do tabuleiro (64 casas / 22 na Demo)
+    │   ├── DiceModel.js           # Rolagem do dado e cálculo de bônus
+    │   ├── BlockProgramModel.js   # Árvore de blocos (AST), avaliador e gerador de código Python
+    │   ├── BotModel.js            # Lógica de decisão da CPU
+    │   ├── ChallengeModel.js      # Carregamento e validação dos desafios
+    │   ├── UserProfileModel.js    # Perfil, conquistas e histórico de partidas
+    │   └── OnlineMultiplayerModel.js # Sincronização P2P (WebRTC PeerJS + BroadcastChannel)
     ├── views/
-    │   ├── HomeView.js            # Renderização do Menu Hub, Login/Cadastro e Lobby P2P
-    │   ├── BoardView.js           # Tabuleiro, peões, câmera e janela flutuante arrastável
-    │   ├── DiceView.js            # Animação do dado 3D e medidor de energia
-    │   ├── BlockWorkspaceView.js  # Workspace de blocos, Live Badge condicional e Python preview
-    │   ├── ChallengeCardsView.js  # Apresentação dos 3 cards holográficos 3D
-    │   ├── ChallengeModalView.js  # Modal interativo do desafio com cronômetro
-    │   ├── StatusPanelView.js     # Placar, terminal de eventos e game over
-    │   └── SoundView.js           # Síntese sonora procedural (Web Audio API)
+    │   ├── HomeView.js            # Autenticação inicial, menu principal e perfil/histórico
+    │   ├── BoardView.js           # Renderização do tabuleiro e janela do oponente
+    │   ├── DiceView.js            # Dado e barra de energia
+    │   ├── BlockWorkspaceView.js  # Área de montagem dos blocos e preview Python
+    │   ├── ChallengeCardsView.js  # Seleção das 3 cartas de desafio
+    │   ├── ChallengeModalView.js  # Modal do desafio e cronômetro
+    │   ├── StatusPanelView.js     # Placar, histórico de ações e fim de jogo
+    │   └── SoundView.js           # Efeitos sonoros via Web Audio API
     └── controllers/
-        ├── GameController.js      # Orquestrador do fluxo da corrida Solo, Demo e Online
-        ├── CodingController.js    # Validação da árvore de blocos vs energia do dado
-        └── ChallengeController.js # Controle dos desafios e distribuição de recompensas
+        ├── GameController.js      # Fluxo principal da partida (Demo, Solo e Online)
+        ├── CodingController.js    # Validação entre blocos montados e energia do dado
+        └── ChallengeController.js # Sorteio de desafios e aplicação de bônus/penalidades
 ```
 
 ---
 
-## 🌐 Como Publicar no GitHub Pages (Custo Zero & Zero Configuração)
+## 💻 Executando Localmente
 
-Como o projeto não depende de banco de dados proprietário nem expõe chaves privadas de API, publicá-lo no **GitHub Pages** leva menos de 1 minuto:
+Como o projeto utiliza **ES Modules**, abra através de um servidor HTTP local (não diretamente via `file://`):
 
-1. Suba este repositório para o seu **GitHub**.
-2. No repositório do GitHub, clique em **Settings** ➔ **Pages** (no menu lateral esquerdo).
-3. Em **Build and deployment** ➔ **Source**, selecione **Deploy from a branch**.
-4. Escolha a branch **`main`** (ou `master`), pasta **`/ (root)`** e clique em **Save**.
-5. Aguarde alguns segundos e acesse a URL gerada (`https://seu-usuario.github.io/nome-do-repositorio/`)!
-   - O modo **Solo vs CPU**, o **Multiplayer Online (Partida Rápida & Salas `PY-XXXX`)** via WebRTC P2P e o **Sistema de Contas com Backup JSON** já funcionarão automaticamente via HTTPS.
-
----
-
-## 🚀 Como Executar o Projeto Localmente
-
-Por utilizar **ES Modules** nativos do JavaScript, sirva os arquivos via servidor HTTP local:
-
-### Opção 1: Usando Python
 ```bash
+# Com Python
 python -m http.server 8000
-```
-Acesse no navegador: `http://localhost:8000`
 
-### Opção 2: Usando Node.js / npx
-```bash
+# Ou com Node.js
 npx serve .
 ```
 
-### Opção 3: Extensão Live Server (VS Code / Antigravity IDE)
-Clique com o botão direito no arquivo `index.html` e selecione **"Open with Live Server"**.
-
-> 💡 **Dica para testar o Multiplayer localmente:** Abra duas abas em `http://localhost:8000` e clique em **"⚡ Buscar Partida Rápida"** nas duas abas (ou crie uma sala `PY-XXXX` em uma aba e conecte na outra).
-
----
-
-## 🐙 Como Contribuir com Novos Desafios (Open Source)
-
-O catálogo de perguntas do jogo conta atualmente com **45 questões** (`py-001` a `py-045`) e pode ser expandido por qualquer desenvolvedor:
-
-1. Faça um **Fork** deste repositório.
-2. Abra o arquivo [`desafios.json`](./desafios.json) e adicione uma nova questão (`"dificuldade": "facil" | "medio" | "dificil"`):
-   ```json
-   {
-     "id": "py-046",
-     "categoria": "Compreensão de Conjuntos",
-     "dificuldade": "medio",
-     "pergunta": "Quantos elementos terá o conjunto resultante?",
-     "codigo": "s = {x % 3 for x in range(6)}\nprint(len(s))",
-     "opcoes": ["6", "3", "2", "1"],
-     "resposta_correta": 1,
-     "explicacao": "O operador % 3 gera apenas os restos 0, 1 e 2. Como conjuntos (sets) eliminam duplicatas, restam 3 elementos.",
-     "autor": "@seu-usuario"
-   }
-   ```
-3. Envie um **Pull Request (PR)** com suas alterações!
+Acesse `http://localhost:8000` no navegador.
