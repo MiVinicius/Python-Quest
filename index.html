@@ -2,15 +2,23 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Python Quest - Corrida de 64 Casas com Programação em Blocos</title>
-  <meta name="description" content="Jogo educativo e competitivo de tabuleiro de 64 casas com programação Python em blocos, cartas de desafio 3D e multiplayer online.">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#090c12">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <link rel="manifest" href="manifest.json">
+  <title>Python Quest — Jogo de Tabuleiro e Programação em Blocos Python</title>
+  <meta name="description" content="Aprenda lógica e Python na prática! Monte algoritmos em blocos (loops for, if e try/except), enfrente 45 desafios de código e jogue no Modo Demonstração, Solo vs CPU ou Multiplayer Online.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://mivinicius.github.io/python-quest/">
+  <meta property="og:title" content="Python Quest — Jogo de Tabuleiro e Programação em Blocos Python">
+  <meta property="og:description" content="Monte algoritmos em blocos, responda desafios de Python para ganhar moedas e dispute nos modos Demonstração (32 casas), Solo vs CPU (64 casas) ou Multiplayer Online.">
   
   <!-- Estilos -->
-  <link rel="stylesheet" href="css/styles.css?v=0.4.4">
-  <link rel="stylesheet" href="css/blocks.css?v=0.4.4">
-  <link rel="stylesheet" href="css/home.css?v=0.4.4">
-  <link rel="stylesheet" href="css/cards.css?v=0.4.4">
+  <link rel="stylesheet" href="css/styles.css?v=0.4.5">
+  <link rel="stylesheet" href="css/blocks.css?v=0.4.5">
+  <link rel="stylesheet" href="css/home.css?v=0.4.5">
+  <link rel="stylesheet" href="css/cards.css?v=0.4.5">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🐍</text></svg>">
 </head>
 <body>
@@ -237,7 +245,20 @@
     <button type="button" id="btnFontIncrease" class="font-control-btn" title="Aumentar tamanho da fonte" aria-label="Aumentar tamanho da fonte">A+</button>
   </div>
 
+  <!-- AVISO DE ORIENTAÇÃO HORIZONTAL PARA SMARTPHONES EM MODO RETRATO -->
+  <div id="rotateDeviceOverlay" class="rotate-device-overlay" role="dialog" aria-modal="true" aria-labelledby="rotateDeviceTitle">
+    <div class="rotate-device-card">
+      <div class="rotate-device-icon" aria-hidden="true">📱🔄</div>
+      <h2 id="rotateDeviceTitle">Gire o celular para a horizontal</h2>
+      <p>O <strong>Python Quest</strong> foi otimizado para o modo paisagem (horizontal) em smartphones, garantindo melhor visualização do tabuleiro e dos blocos.</p>
+      <div class="rotate-device-actions">
+        <button type="button" id="btnEnterLandscapeFullscreen" class="btn-success">⚡ Abrir em Tela Cheia Horizontal</button>
+        <button type="button" id="btnDismissRotateOverlay" class="btn-ghost btn-sm">Continuar mesmo assim</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Script Principal com Arquitetura MVC (ES Modules) -->
-  <script type="module" src="js/app.js?v=0.4.4"></script>
+  <script type="module" src="js/app.js?v=0.4.5"></script>
 </body>
 </html>

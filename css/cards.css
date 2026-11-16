@@ -273,3 +273,63 @@
 .card-tier-hard .btn-pick-card:hover {
   background: #c084fc;
 }
+
+/* Responsividade Smartphone Horizontal (Cards cabem inteiros lado a lado) */
+@media (max-height: 540px) and (orientation: landscape), (max-width: 760px) {
+  .cards-selection-overlay {
+    padding: 10px;
+  }
+
+  .cards-modal-wrapper {
+    gap: 10px;
+  }
+
+  .cards-modal-title {
+    font-size: 1.25rem;
+  }
+
+  .cards-modal-subtitle {
+    font-size: 0.8rem;
+  }
+
+  .cards-hand-container {
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+    gap: 12px;
+    padding: 6px 4px 10px;
+  }
+
+  .challenge-card-3d {
+    width: 220px;
+    height: 255px;
+    padding: 12px;
+    flex-shrink: 0;
+  }
+
+  .card-art-frame {
+    padding: 8px;
+    margin-bottom: 8px;
+    gap: 4px;
+  }
+
+  .card-art-icon {
+    font-size: 1.9rem;
+  }
+
+  .card-question-preview {
+    font-size: 0.78rem;
+  }
+
+  .card-rewards-box {
+    padding: 5px 8px;
+    font-size: 0.72rem;
+    margin-bottom: 8px;
+  }
+
+  .btn-pick-card {
+    padding: 7px;
+    font-size: 0.78rem;
+  }
+}
+

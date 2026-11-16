@@ -259,12 +259,12 @@ document.addEventListener('DOMContentLoaded', () => {
   btnFontIncrease?.addEventListener('click', () => applyFontScale(currentFontScale + STEP_SCALE));
   btnFontReset?.addEventListener('click', () => applyFontScale(DEFAULT_SCALE));
 
-  // Mantém a altura do mapa (.zigzag-board-wrapper) alinhada com a coluna esquerda (Estado + Guia Rápido)
+  // Mantém a altura do mapa (.zigzag-board-wrapper) alinhada com a coluna esquerda no desktop
   const syncBoardHeightWithLeftPanel = () => {
     const leftPanel = document.querySelector('.left-panel');
     const boardWrapper = document.querySelector('.zigzag-board-wrapper');
     if (!leftPanel || !boardWrapper) return;
-    if (window.innerWidth <= 960) {
+    if (window.innerWidth <= 960 || window.innerHeight <= 540) {
       boardWrapper.style.height = '';
       return;
     }
@@ -283,4 +283,26 @@ document.addEventListener('DOMContentLoaded', () => {
       ro.observe(leftPanelEl);
     }
   }
+
+  // Suporte Mobile Landscape: botão de Tela Cheia Horizontal e dispensa opcional do aviso de rotação
+  const btnEnterLandscape = document.getElementById('btnEnterLandscapeFullscreen');
+  const btnDismissRotate = document.getElementById('btnDismissRotateOverlay');
+
+  btnEnterLandscape?.addEventListener('click', async () => {
+    try {
+      if (document.documentElement.requestFullscreen) {
+        await document.documentElement.requestFullscreen();
+      }
+      if (screen.orientation && screen.orientation.lock) {
+        await screen.orientation.lock('landscape');
+      }
+    } catch (_) {
+      // Alguns navegadores (ex: iOS Safari) exigem giro manual do aparelho
+    }
+    document.body.classList.add('dismiss-rotate-prompt');
+  });
+
+  btnDismissRotate?.addEventListener('click', () => {
+    document.body.classList.add('dismiss-rotate-prompt');
+  });
 });

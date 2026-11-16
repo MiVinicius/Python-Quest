@@ -1324,5 +1324,83 @@
   border-radius: 4px;
 }
 
+/* ==========================================================================
+   RESPONSIVIDADE SMARTPHONE HORIZONTAL (PAISAGEM / LANDSCAPE)
+   ========================================================================== */
+@media (max-height: 540px) and (orientation: landscape), (max-width: 960px) and (orientation: landscape) {
+  .auth-gate-wrapper {
+    padding: 10px 16px;
+    align-items: flex-start;
+  }
+
+  .auth-gate-card {
+    max-width: 620px;
+    padding: 14px 18px;
+    gap: 10px;
+  }
+
+  .auth-gate-brand {
+    padding-bottom: 8px;
+  }
+
+  .home-content-wrapper {
+    padding: 10px 14px;
+    gap: 12px;
+  }
+
+  .home-top-bar {
+    padding: 8px 14px;
+  }
+
+  .home-hero {
+    padding: 8px 12px 4px;
+    gap: 6px;
+  }
+
+  .hero-title {
+    font-size: 1.55rem;
+  }
+
+  .hero-desc {
+    font-size: 0.84rem;
+    line-height: 1.35;
+  }
+
+  .home-menu-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    max-width: 780px;
+    margin-top: 6px;
+    gap: 10px;
+  }
+
+  .menu-card {
+    padding: 10px 12px;
+  }
+
+  .menu-card-icon {
+    font-size: 1.7rem;
+  }
+
+  .home-modal-card {
+    max-height: 94vh;
+    border-radius: 16px;
+  }
+
+  .home-modal-header {
+    padding: 12px 16px;
+  }
+
+  .home-modal-body {
+    padding: 14px 16px;
+    gap: 12px;
+  }
+
+  .home-modal-footer {
+    padding: 10px 16px;
+  }
+}
+
+
 
 
