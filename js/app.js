@@ -244,7 +244,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const applyFontScale = (scale) => {
     currentFontScale = clampScale(scale);
-    document.documentElement.style.fontSize = `${currentFontScale}%`;
+    document.documentElement.style.setProperty('--user-font-scale', `${currentFontScale}%`);
     if (btnFontReset) btnFontReset.textContent = `${currentFontScale}%`;
     if (btnFontDecrease) btnFontDecrease.disabled = currentFontScale <= MIN_SCALE;
     if (btnFontIncrease) btnFontIncrease.disabled = currentFontScale >= MAX_SCALE;
