@@ -32,9 +32,40 @@ export class StatusPanelView {
     this.playerStatusBadge = document.getElementById('playerStatusBadge');
     this.botStatusBadge = document.getElementById('botStatusBadge');
     this.consoleLogsEl = document.getElementById('consoleLogsList');
+    this.terminalCardEl = document.getElementById('terminalPanelCard');
+    this.btnTerminalMin = document.getElementById('btnTerminalMinimize');
+    this.btnTerminalMax = document.getElementById('btnTerminalMaximize');
     this.currentTotalTiles = 64;
 
+    this.setupTerminalControls();
     this.setupModals();
+  }
+
+  setupTerminalControls() {
+    if (this.btnTerminalMin && this.terminalCardEl) {
+      this.btnTerminalMin.addEventListener('click', () => {
+        const isMin = this.terminalCardEl.classList.toggle('terminal-minimized');
+        if (isMin) {
+          this.terminalCardEl.classList.remove('terminal-maximized');
+          if (this.btnTerminalMax) this.btnTerminalMax.textContent = '⤢';
+        }
+        this.btnTerminalMin.textContent = isMin ? '➕' : '➖';
+        this.btnTerminalMin.title = isMin ? 'Restaurar Terminal' : 'Minimizar Terminal';
+      });
+    }
+
+    if (this.btnTerminalMax && this.terminalCardEl) {
+      this.btnTerminalMax.addEventListener('click', () => {
+        this.terminalCardEl.classList.remove('terminal-minimized');
+        if (this.btnTerminalMin) {
+          this.btnTerminalMin.textContent = '➖';
+          this.btnTerminalMin.title = 'Minimizar Terminal';
+        }
+        const isMax = this.terminalCardEl.classList.toggle('terminal-maximized');
+        this.btnTerminalMax.textContent = isMax ? '⤡' : '⤢';
+        this.btnTerminalMax.title = isMax ? 'Reduzir Altura do Terminal' : 'Maximizar Altura do Terminal';
+      });
+    }
   }
 
   setupModals() {

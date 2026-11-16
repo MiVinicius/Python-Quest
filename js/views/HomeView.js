@@ -432,37 +432,236 @@ export class HomeView {
         </div>
       </div>
 
-      <!-- MODAL 3: COMO JOGAR -->
+      <!-- MODAL 3: COMO JOGAR (ESTRUTURADO EM GRADES COM ÍCONES GRANDES) -->
       <div class="home-modal-overlay" id="modalHowToPlay">
-        <div class="home-modal-card">
+        <div class="home-modal-card howto-modal-card">
           <div class="home-modal-header">
-            <div class="home-modal-title"><span>📖</span> Manual de Regras & Programação</div>
+            <div class="home-modal-title"><span>📖</span> Como Jogar — Guia Visual & Blocos Python</div>
             <button class="home-modal-close" data-close="modalHowToPlay">✖</button>
           </div>
-          <div class="home-modal-body" style="font-size: 0.9rem; line-height: 1.6; color: #cbd5e1;">
-            <h4 style="color: #38bdf8; margin-bottom: 4px;">🏁 1. O Objetivo</h4>
-            <p>Seja o primeiro programador a alcançar ou ultrapassar a <strong>Casa 64</strong> (ou a <strong>Casa 32</strong> no Modo Demonstração) na trilha em zigue-zague.</p>
-            
-            <h4 style="color: #ffd43b; margin-top: 14px; margin-bottom: 4px;">🎲 2. A Energia do Dado</h4>
-            <p>No início do seu turno, role o dado D6 para gerar sua energia de movimento. O total obtido define exatamente quantos passos base seu algoritmo deve computar.</p>
+          <div class="home-modal-body howto-modal-body">
 
-            <h4 style="color: #10b981; margin-top: 14px; margin-bottom: 4px;">🧩 3. Árvore de Blocos & Estruturas Python</h4>
-            <ul style="padding-left: 20px; display: flex; flex-direction: column; gap: 6px;">
-              <li><strong>🔁 Loop <code>for</code>:</strong> Repete os blocos internos <code>N</code> vezes (suporta loops aninhados <code>for</code> dentro de <code>for</code>!).</li>
-              <li><strong>🔀 Condicional <code>if</code>:</strong> Avalia condições em tempo real (<code>dado % 2 == 0</code>, <code>oponente.a_frente</code>, <code>proxima_casa.tem_bug()</code>) e concede <strong>+1 passo bônus extra</strong> se verdadeira!</li>
-              <li><strong>➡️ Avançar / 🦘 Pular:</strong> <code>avancar(N)</code> caminha normalmente; <code>pular(N)</code> salta acrobaticamente sobre bugs na casa de destino.</li>
-              <li><strong>🛡️ Escudo (<code>try / except</code>):</strong> Arma uma proteção que anula 100% o recuo da próxima armadilha (Bug).</li>
-            </ul>
+            <!-- SEÇÃO 1: FLUXO DO TURNO (GRADE DE 3 ETAPAS) -->
+            <div class="howto-section">
+              <div class="howto-section-header">
+                <span class="howto-section-badge badge-step-blue">PASSO A PASSO</span>
+                <h3 class="howto-section-title">🕹️ Dinâmica de Cada Turno</h3>
+              </div>
+              <div class="howto-steps-grid">
+                <div class="howto-item-card howto-step-card theme-yellow">
+                  <div class="howto-icon-box icon-yellow">🎲</div>
+                  <div class="howto-item-content">
+                    <div class="howto-item-top">
+                      <h4>1. Role o Dado D6</h4>
+                      <span class="howto-code-pill pill-yellow">1 a 6 passos</span>
+                    </div>
+                    <p>Gere sua energia de movimento no início do turno. O valor sorteado define exatamente quantos passos seus blocos devem somar.</p>
+                  </div>
+                </div>
 
-            <h4 style="color: #f59e0b; margin-top: 14px; margin-bottom: 4px;">⚡ 4. Casas Especiais & Cartas 3D</h4>
-            <ul style="padding-left: 20px; display: flex; flex-direction: column; gap: 6px;">
-              <li><strong>⚡ Atalhos (+3/+4):</strong> Impulsionam seu peão à frente.</li>
-              <li><strong>🐛 Bugs (-3/-5):</strong> Forçam recuo imediato (a menos que você use Pulo ou tenha Escudo ativo).</li>
-              <li><strong>❓ Desafios de Código:</strong> Escolha entre 3 Cartas 3D (🟢 Comum +2, 🔵 Rara +4, 🟣 Épica +6) e responda dentro do tempo.</li>
-            </ul>
+                <div class="howto-item-card howto-step-card theme-cyan">
+                  <div class="howto-icon-box icon-cyan">🧩</div>
+                  <div class="howto-item-content">
+                    <div class="howto-item-top">
+                      <h4>2. Monte os Blocos</h4>
+                      <span class="howto-code-pill pill-cyan">Algoritmo</span>
+                    </div>
+                    <p>Clique ou arraste blocos da paleta para a Linha de Execução, combinando avanços, pulos, loops e condicionais.</p>
+                  </div>
+                </div>
+
+                <div class="howto-item-card howto-step-card theme-green">
+                  <div class="howto-icon-box icon-green">🚀</div>
+                  <div class="howto-item-content">
+                    <div class="howto-item-top">
+                      <h4>3. Execute e Avance</h4>
+                      <span class="howto-code-pill pill-green">Meta: 64 / 32</span>
+                    </div>
+                    <p>Compile seu código para movimentar seu peão pela trilha em zigue-zague até alcançar a <strong>Casa 64</strong> (ou <strong>32</strong> na Demo)!</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- SEÇÃO 2: BLOCOS DE PROGRAMAÇÃO PYTHON (GRADE 2x3) -->
+            <div class="howto-section">
+              <div class="howto-section-header">
+                <span class="howto-section-badge badge-step-green">ARSENAL DE CÓDIGO</span>
+                <h3 class="howto-section-title">🧩 Blocos de Programação Python</h3>
+              </div>
+              <div class="howto-cards-grid">
+
+                <div class="howto-item-card theme-green">
+                  <div class="howto-icon-box icon-green">➡️</div>
+                  <div class="howto-item-content">
+                    <div class="howto-item-top">
+                      <h4>Avançar</h4>
+                      <span class="howto-code-pill pill-green">player.avancar(N)</span>
+                    </div>
+                    <p>Move o seu peão normalmente pela trilha na quantidade <code>N</code> de casas definida dentro dos parênteses.</p>
+                  </div>
+                </div>
+
+                <div class="howto-item-card theme-purple">
+                  <div class="howto-icon-box icon-purple">🦘</div>
+                  <div class="howto-item-content">
+                    <div class="howto-item-top">
+                      <h4>Pular</h4>
+                      <span class="howto-code-pill pill-purple">player.pular(N)</span>
+                    </div>
+                    <p>Realiza um salto acrobático que <strong>ignora armadilhas (Bugs)</strong> caso você aterrisse diretamente sobre uma casa com Bug.</p>
+                  </div>
+                </div>
+
+                <div class="howto-item-card theme-amber">
+                  <div class="howto-icon-box icon-amber">🔁</div>
+                  <div class="howto-item-content">
+                    <div class="howto-item-top">
+                      <h4>Loop for</h4>
+                      <span class="howto-code-pill pill-amber">for i in range(N):</span>
+                    </div>
+                    <p>Repete todos os blocos encaixados dentro dele <code>N</code> vezes. Suporta <strong>loops aninhados</strong> (<code>for</code> dentro de <code>for</code>)!</p>
+                  </div>
+                </div>
+
+                <div class="howto-item-card theme-yellow">
+                  <div class="howto-icon-box icon-yellow">🔀</div>
+                  <div class="howto-item-content">
+                    <div class="howto-item-top">
+                      <h4>Condicional if</h4>
+                      <span class="howto-code-pill pill-yellow">+1 Passo Bônus</span>
+                    </div>
+                    <p>Avalia condições do jogo (<code>dado % 2 == 0</code>, <code>oponente.a_frente</code>, <code>proxima_casa.tem_bug()</code>) e concede <strong>+1 passo extra</strong> se for <code>True</code>!</p>
+                  </div>
+                </div>
+
+                <div class="howto-item-card theme-cyan">
+                  <div class="howto-icon-box icon-cyan">🛡️</div>
+                  <div class="howto-item-content">
+                    <div class="howto-item-top">
+                      <h4>Escudo Protetor</h4>
+                      <span class="howto-code-pill pill-cyan">try / except (0 passos)</span>
+                    </div>
+                    <p>Não consome passos do dado e arma uma blindagem que <strong>anula 100% o recuo</strong> da próxima armadilha (Bug) em que você cair.</p>
+                  </div>
+                </div>
+
+                <div class="howto-item-card theme-yellow">
+                  <div class="howto-icon-box icon-amber">🐍</div>
+                  <div class="howto-item-content">
+                    <div class="howto-item-top">
+                      <h4>Tradução em Python</h4>
+                      <span class="howto-code-pill pill-amber">🔓 10 🪙 por turno</span>
+                    </div>
+                    <p>Use as <strong>moedas (🪙)</strong> ganhas nos Desafios para desbloquear o terminal e inspecionar o código Python real gerado pelos seus blocos.</p>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- SEÇÃO 3: CASAS DO TABULEIRO (GRADE 2x2) -->
+            <div class="howto-section">
+              <div class="howto-section-header">
+                <span class="howto-section-badge badge-step-cyan">MAPA DA TRILHA</span>
+                <h3 class="howto-section-title">🗺️ Casas Especiais do Tabuleiro</h3>
+              </div>
+              <div class="howto-cards-grid">
+
+                <div class="howto-item-card theme-cyan">
+                  <div class="howto-icon-box icon-cyan">⚡</div>
+                  <div class="howto-item-content">
+                    <div class="howto-item-top">
+                      <h4>Atalhos de Otimização</h4>
+                      <span class="howto-code-pill pill-cyan">+3 ou +4 casas</span>
+                    </div>
+                    <p>Ao parar sobre um Atalho, seu algoritmo recebe um impulso extra imediato e avança casas adicionais automaticamente.</p>
+                  </div>
+                </div>
+
+                <div class="howto-item-card theme-red">
+                  <div class="howto-icon-box icon-red">🐛</div>
+                  <div class="howto-item-content">
+                    <div class="howto-item-top">
+                      <h4>Bugs de Sistema</h4>
+                      <span class="howto-code-pill pill-red">-2 a -5 casas</span>
+                    </div>
+                    <p>Erros críticos na trilha que forçam recuo imediato do peão — a menos que você use o bloco <strong>Pular</strong> ou tenha um <strong>Escudo</strong> ativo!</p>
+                  </div>
+                </div>
+
+                <div class="howto-item-card theme-amber">
+                  <div class="howto-icon-box icon-amber">❓</div>
+                  <div class="howto-item-content">
+                    <div class="howto-item-top">
+                      <h4>Arena de Desafio</h4>
+                      <span class="howto-code-pill pill-amber">25s Time Attack</span>
+                    </div>
+                    <p>Abre a seleção de <strong>3 Cartas Holográficas 3D</strong> com perguntas práticas de Python para ganhar <strong>passos de Boost</strong> e <strong>Moedas (🪙)</strong>.</p>
+                  </div>
+                </div>
+
+                <div class="howto-item-card theme-yellow">
+                  <div class="howto-icon-box icon-yellow">🏆</div>
+                  <div class="howto-item-content">
+                    <div class="howto-item-top">
+                      <h4>Meta Python Master</h4>
+                      <span class="howto-code-pill pill-yellow">Casa 64 / Casa 32</span>
+                    </div>
+                    <p>Linha de chegada da corrida! O primeiro competidor a alcançar a casa final vence a partida e registra a vitória no histórico.</p>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- SEÇÃO 4: CARTAS DE DESAFIO 3D & RECOMPENSAS (GRADE DE 3 COLUNAS) -->
+            <div class="howto-section">
+              <div class="howto-section-header">
+                <span class="howto-section-badge badge-step-purple">RISCO & RECOMPENSA</span>
+                <h3 class="howto-section-title">🃏 Cartas de Desafio 3D & Economia</h3>
+              </div>
+              <div class="howto-tiers-grid">
+
+                <div class="howto-item-card howto-tier-card theme-green">
+                  <div class="howto-icon-box icon-green">🌱</div>
+                  <div class="howto-item-content">
+                    <div class="howto-item-top">
+                      <h4>Carta Comum</h4>
+                      <span class="howto-code-pill pill-green">Fácil</span>
+                    </div>
+                    <p><strong>Acerto:</strong> <code>+2 passos</code> no dado + <strong>🪙 10 moedas</strong>.<br><strong>Erro:</strong> 🛡️ Sem penalidade de recuo.</p>
+                  </div>
+                </div>
+
+                <div class="howto-item-card howto-tier-card theme-cyan">
+                  <div class="howto-icon-box icon-cyan">💎</div>
+                  <div class="howto-item-content">
+                    <div class="howto-item-top">
+                      <h4>Carta Rara</h4>
+                      <span class="howto-code-pill pill-cyan">Médio</span>
+                    </div>
+                    <p><strong>Acerto:</strong> <code>+4 passos</code> no dado + <strong>🪙 20 moedas</strong>.<br><strong>Erro:</strong> ⚠️ Recua <code>1 casa</code> na trilha.</p>
+                  </div>
+                </div>
+
+                <div class="howto-item-card howto-tier-card theme-purple">
+                  <div class="howto-icon-box icon-purple">👑</div>
+                  <div class="howto-item-content">
+                    <div class="howto-item-top">
+                      <h4>Carta Épica</h4>
+                      <span class="howto-code-pill pill-purple">Difícil</span>
+                    </div>
+                    <p><strong>Acerto:</strong> <code>+6 passos</code> no dado + <strong>🪙 35 moedas</strong>.<br><strong>Erro:</strong> ⚠️ Recua <code>2 casas</code> na trilha.</p>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
           </div>
           <div class="home-modal-footer">
-            <button class="btn-success" data-close="modalHowToPlay">Entendi! Bora Jogar</button>
+            <button class="btn-success" data-close="modalHowToPlay">Entendi! Bora Jogar ➔</button>
           </div>
         </div>
       </div>

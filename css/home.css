@@ -1123,4 +1123,206 @@
   background: rgba(239, 68, 68, 0.18);
 }
 
+/* ==========================================================================
+   MODAL COMO JOGAR — GRADES VISUAIS COM ÍCONES GRANDES
+   ========================================================================== */
+.howto-modal-card {
+  max-width: 900px;
+}
+
+.howto-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 22px 24px;
+}
+
+.howto-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.howto-section-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.howto-section-badge {
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 3px 9px;
+  border-radius: 999px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+
+.badge-step-blue {
+  background: rgba(56, 189, 248, 0.18);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.4);
+}
+
+.badge-step-green {
+  background: rgba(16, 185, 129, 0.18);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+}
+
+.badge-step-cyan {
+  background: rgba(6, 182, 212, 0.18);
+  color: #22d3ee;
+  border: 1px solid rgba(6, 182, 212, 0.4);
+}
+
+.badge-step-purple {
+  background: rgba(168, 85, 247, 0.18);
+  color: #c084fc;
+  border: 1px solid rgba(168, 85, 247, 0.4);
+}
+
+.howto-section-title {
+  font-size: 1.08rem;
+  font-weight: 800;
+  color: #f8fafc;
+  margin: 0;
+}
+
+.howto-steps-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.howto-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.howto-tiers-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+@media (max-width: 760px) {
+  .howto-steps-grid,
+  .howto-cards-grid,
+  .howto-tiers-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.howto-item-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  background: rgba(15, 23, 42, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-left: 4px solid #38bdf8;
+  border-radius: 16px;
+  padding: 14px 15px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.howto-item-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+}
+
+.howto-step-card,
+.howto-tier-card {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.howto-item-card.theme-yellow { border-left-color: #fbbf24; }
+.howto-item-card.theme-cyan   { border-left-color: #22d3ee; }
+.howto-item-card.theme-green  { border-left-color: #10b981; }
+.howto-item-card.theme-purple { border-left-color: #a855f7; }
+.howto-item-card.theme-amber  { border-left-color: #f59e0b; }
+.howto-item-card.theme-red    { border-left-color: #ef4444; }
+
+.howto-icon-box {
+  width: 54px;
+  height: 54px;
+  min-width: 54px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: inset 0 0 14px rgba(255, 255, 255, 0.05);
+}
+
+.icon-yellow { background: rgba(251, 191, 36, 0.16); border-color: rgba(251, 191, 36, 0.4); }
+.icon-cyan   { background: rgba(6, 182, 212, 0.16); border-color: rgba(6, 182, 212, 0.4); }
+.icon-green  { background: rgba(16, 185, 129, 0.16); border-color: rgba(16, 185, 129, 0.4); }
+.icon-purple { background: rgba(168, 85, 247, 0.16); border-color: rgba(168, 85, 247, 0.4); }
+.icon-amber  { background: rgba(245, 158, 11, 0.16); border-color: rgba(245, 158, 11, 0.4); }
+.icon-red    { background: rgba(239, 68, 68, 0.16); border-color: rgba(239, 68, 68, 0.4); }
+
+.howto-item-content {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  flex: 1;
+  min-width: 0;
+}
+
+.howto-item-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.howto-item-top h4 {
+  font-size: 0.98rem;
+  font-weight: 800;
+  color: #f8fafc;
+  margin: 0;
+}
+
+.howto-code-pill {
+  font-family: var(--font-code);
+  font-size: 0.74rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.pill-yellow { background: rgba(251, 191, 36, 0.18); color: #fde68a; border: 1px solid rgba(251, 191, 36, 0.38); }
+.pill-cyan   { background: rgba(6, 182, 212, 0.18); color: #67e8f9; border: 1px solid rgba(6, 182, 212, 0.38); }
+.pill-green  { background: rgba(16, 185, 129, 0.18); color: #6ee7b7; border: 1px solid rgba(16, 185, 129, 0.38); }
+.pill-purple { background: rgba(168, 85, 247, 0.18); color: #d8b4fe; border: 1px solid rgba(168, 85, 247, 0.38); }
+.pill-amber  { background: rgba(245, 158, 11, 0.18); color: #fcd34d; border: 1px solid rgba(245, 158, 11, 0.38); }
+.pill-red    { background: rgba(239, 68, 68, 0.18); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.38); }
+
+.howto-item-content p {
+  font-size: 0.85rem;
+  color: #cbd5e1;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.howto-item-content code {
+  font-family: var(--font-code);
+  font-size: 0.8rem;
+  background: rgba(2, 6, 23, 0.65);
+  color: #38bdf8;
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+
 

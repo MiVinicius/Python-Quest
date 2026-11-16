@@ -7,10 +7,10 @@
   <meta name="description" content="Jogo educativo e competitivo de tabuleiro de 64 casas com programação Python em blocos, cartas de desafio 3D e multiplayer online.">
   
   <!-- Estilos -->
-  <link rel="stylesheet" href="css/styles.css?v=0.4.1">
-  <link rel="stylesheet" href="css/blocks.css?v=0.4.1">
-  <link rel="stylesheet" href="css/home.css?v=0.4.1">
-  <link rel="stylesheet" href="css/cards.css?v=0.4.1">
+  <link rel="stylesheet" href="css/styles.css?v=0.4.4">
+  <link rel="stylesheet" href="css/blocks.css?v=0.4.4">
+  <link rel="stylesheet" href="css/home.css?v=0.4.4">
+  <link rel="stylesheet" href="css/cards.css?v=0.4.4">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🐍</text></svg>">
 </head>
 <body>
@@ -133,61 +133,75 @@
           </div>
         </div>
 
-        <!-- Guia Detalhado do Tabuleiro e Ações -->
-        <div class="panel-card" style="max-height: 290px; overflow-y: auto;">
-          <span class="panel-title">Guia Completo do Jogo</span>
-          <div style="font-size: 0.74rem; display: flex; flex-direction: column; gap: 8px; color: #cbd5e1; line-height: 1.35;">
-            
-            <!-- Seção 1: Casas -->
-            <div>
-              <span style="font-size: 0.68rem; font-weight: 700; color: #94a3b8; text-transform: uppercase;">Casas da Trilha:</span>
-              <div style="margin-top: 3px; display: flex; flex-direction: column; gap: 4px;">
-                <div><strong style="color: var(--color-cyan);">⚡ Atalhos (+3/+4):</strong> Salto acelerador de casas.</div>
-                <div><strong style="color: var(--color-danger);">🐛 Bugs (-3/-5):</strong> Erro que força recuo (anulado por Escudo).</div>
-                <div><strong style="color: var(--color-warning);">❓ Desafio:</strong> Escolha entre 3 cartas táticas de Python.</div>
-                <div><strong style="color: var(--py-yellow);">🏆 Meta (64):</strong> Linha de chegada do Python Master.</div>
+        <!-- Guia Detalhado do Tabuleiro e Ações (Grade Visual) -->
+        <div class="panel-card sidebar-guide-card">
+          <span class="panel-title">Guia Rápido da Partida</span>
+          <div class="sidebar-guide-grid">
+            <div class="sidebar-guide-item">
+              <span class="sidebar-guide-icon">⚡</span>
+              <div>
+                <strong style="color: var(--color-cyan);">Atalho (+3/+4)</strong>
+                <small>Avança casas extras</small>
               </div>
             </div>
-
-            <!-- Seção 2: Blocos Especiais -->
-            <div style="border-top: 1px solid rgba(255,255,255,0.06); padding-top: 6px;">
-              <span style="font-size: 0.68rem; font-weight: 700; color: #94a3b8; text-transform: uppercase;">Ações dos Blocos:</span>
-              <div style="margin-top: 3px; display: flex; flex-direction: column; gap: 4px;">
-                <div><strong style="color: #6ee7b7;">➡️ Avançar:</strong> Caminhada normal pelo dado.</div>
-                <div><strong style="color: #c4b5fd;">🦘 Pular:</strong> Salta casas ignorando armadilhas no caminho.</div>
-                <div><strong style="color: #7dd3fc;">🛡️ Escudo:</strong> Blindagem <code>try/except</code> que anula 100% o próximo Bug.</div>
-                <div><strong style="color: #fde68a;">🔀 Condicional if:</strong> Decisão tática (<code>if dado % 2 == 0:</code> / <code>if oponente.a_frente:</code>) que concede <strong>+1 passo bônus</strong> quando a condição for <code>True</code>.</div>
+            <div class="sidebar-guide-item">
+              <span class="sidebar-guide-icon">🐛</span>
+              <div>
+                <strong style="color: var(--color-danger);">Bug (-2 a -5)</strong>
+                <small>Recua (use Pulo/Escudo)</small>
               </div>
             </div>
-
-            <!-- Seção 3: Cartas 3D & Economia -->
-            <div style="border-top: 1px solid rgba(255,255,255,0.06); padding-top: 6px;">
-              <span style="font-size: 0.68rem; font-weight: 700; color: #94a3b8; text-transform: uppercase;">Cartas 3D & Moedas (🪙):</span>
-              <div style="margin-top: 3px; display: flex; flex-direction: column; gap: 3px;">
-                <div><span style="color: #34d399; font-weight: 700;">🟢 Comum:</span> +2 passos e <strong>+10 🪙</strong> / sem risco.</div>
-                <div><span style="color: #38bdf8; font-weight: 700;">🔵 Rara:</span> +4 passos e <strong>+20 🪙</strong> / -1 recuo.</div>
-                <div><span style="color: #c084fc; font-weight: 700;">🟣 Épica:</span> +6 passos e <strong>+35 🪙</strong> / -2 recuo.</div>
-                <div style="color: #fde68a; margin-top: 2px;">🔓 Use <strong>10 🪙</strong> para revelar a <em>Tradução em Python</em> no turno!</div>
+            <div class="sidebar-guide-item">
+              <span class="sidebar-guide-icon">❓</span>
+              <div>
+                <strong style="color: var(--color-warning);">Desafio 3D</strong>
+                <small>+Passos e +Moedas (🪙)</small>
               </div>
             </div>
-
-          </div>
-        </div>
-
-        <!-- Console Logs do Jogo -->
-        <div class="panel-card" style="flex: 1;">
-          <span class="panel-title">Terminal de Eventos</span>
-          <div class="console-logs-container" id="consoleLogsList">
-            <!-- Logs gerados dinamicamente -->
+            <div class="sidebar-guide-item">
+              <span class="sidebar-guide-icon">🦘</span>
+              <div>
+                <strong style="color: #c4b5fd;">pular(N)</strong>
+                <small>Salta sobre Bugs</small>
+              </div>
+            </div>
+            <div class="sidebar-guide-item">
+              <span class="sidebar-guide-icon">🛡️</span>
+              <div>
+                <strong style="color: #7dd3fc;">try / except</strong>
+                <small>Anula próximo Bug</small>
+              </div>
+            </div>
+            <div class="sidebar-guide-item">
+              <span class="sidebar-guide-icon">🔀</span>
+              <div>
+                <strong style="color: #fde68a;">if condicao:</strong>
+                <small>+1 passo se True</small>
+              </div>
+            </div>
           </div>
         </div>
 
       </aside>
 
-      <!-- COLUNA CENTRAL: TABULEIRO DE 64 CASAS (8x8) -->
+      <!-- COLUNA CENTRAL: TABULEIRO DE 64 CASAS + TERMINAL DE EVENTOS -->
       <section class="center-panel">
         <div id="boardContainer">
           <!-- Renderizado dinamicamente pelo BoardView.js -->
+        </div>
+
+        <!-- Console Logs do Jogo (Logo abaixo do mapa em zigue-zague, com Minimizar e Maximizar) -->
+        <div class="panel-card terminal-panel-card" id="terminalPanelCard">
+          <div class="terminal-panel-header">
+            <span class="panel-title" style="margin-bottom: 0;">Terminal de Eventos</span>
+            <div class="terminal-window-controls">
+              <button type="button" id="btnTerminalMinimize" class="terminal-ctrl-btn" title="Minimizar / Restaurar Terminal" aria-label="Minimizar Terminal">➖</button>
+              <button type="button" id="btnTerminalMaximize" class="terminal-ctrl-btn" title="Maximizar / Reduzir Altura do Terminal" aria-label="Maximizar Terminal">⤢</button>
+            </div>
+          </div>
+          <div class="console-logs-container" id="consoleLogsList">
+            <!-- Logs gerados dinamicamente -->
+          </div>
         </div>
       </section>
 
@@ -224,6 +238,6 @@
   </div>
 
   <!-- Script Principal com Arquitetura MVC (ES Modules) -->
-  <script type="module" src="js/app.js?v=0.4.1"></script>
+  <script type="module" src="js/app.js?v=0.4.4"></script>
 </body>
 </html>

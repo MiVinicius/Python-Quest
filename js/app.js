@@ -17,10 +17,10 @@ import { DiceView } from './views/DiceView.js?v=0.4.1';
 import { BlockWorkspaceView } from './views/BlockWorkspaceView.js?v=0.4.1';
 import { ChallengeModalView } from './views/ChallengeModalView.js?v=0.4.1';
 import { ChallengeCardsView } from './views/ChallengeCardsView.js?v=0.4.1';
-import { StatusPanelView } from './views/StatusPanelView.js?v=0.4.1';
+import { StatusPanelView } from './views/StatusPanelView.js?v=0.4.3';
 import { SoundView } from './views/SoundView.js?v=0.4.1';
-import { HomeView } from './views/HomeView.js?v=0.4.1';
-import { TutorialView } from './views/TutorialView.js?v=0.4.1';
+import { HomeView } from './views/HomeView.js?v=0.4.3';
+import { TutorialView } from './views/TutorialView.js?v=0.4.3';
 
 import { CodingController } from './controllers/CodingController.js?v=0.4.1';
 import { ChallengeController } from './controllers/ChallengeController.js?v=0.4.1';
@@ -258,4 +258,29 @@ document.addEventListener('DOMContentLoaded', () => {
   btnFontDecrease?.addEventListener('click', () => applyFontScale(currentFontScale - STEP_SCALE));
   btnFontIncrease?.addEventListener('click', () => applyFontScale(currentFontScale + STEP_SCALE));
   btnFontReset?.addEventListener('click', () => applyFontScale(DEFAULT_SCALE));
+
+  // Mantém a altura do mapa (.zigzag-board-wrapper) alinhada com a coluna esquerda (Estado + Guia Rápido)
+  const syncBoardHeightWithLeftPanel = () => {
+    const leftPanel = document.querySelector('.left-panel');
+    const boardWrapper = document.querySelector('.zigzag-board-wrapper');
+    if (!leftPanel || !boardWrapper) return;
+    if (window.innerWidth <= 960) {
+      boardWrapper.style.height = '';
+      return;
+    }
+    const leftHeight = leftPanel.offsetHeight;
+    if (leftHeight > 200) {
+      boardWrapper.style.height = `${leftHeight}px`;
+    }
+  };
+
+  syncBoardHeightWithLeftPanel();
+  window.addEventListener('resize', syncBoardHeightWithLeftPanel);
+  if (typeof ResizeObserver !== 'undefined') {
+    const leftPanelEl = document.querySelector('.left-panel');
+    if (leftPanelEl) {
+      const ro = new ResizeObserver(() => syncBoardHeightWithLeftPanel());
+      ro.observe(leftPanelEl);
+    }
+  }
 });

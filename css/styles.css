@@ -283,6 +283,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  align-self: start;
 }
 
 .panel-card {
@@ -395,16 +396,102 @@ body {
   border: 1px solid var(--color-danger);
 }
 
-/* Console Logs em Tempo Real */
-.console-logs-container {
-  height: 320px;
-  overflow-y: auto;
+/* Guia Rápido na Coluna Esquerda */
+.sidebar-guide-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.sidebar-guide-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(15, 23, 42, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 10px;
+  padding: 7px 9px;
+}
+
+.sidebar-guide-icon {
+  font-size: 1.45rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.sidebar-guide-item strong {
+  display: block;
+  font-size: 0.78rem;
+  line-height: 1.2;
+}
+
+.sidebar-guide-item small {
+  display: block;
+  font-size: 0.72rem;
+  color: #94a3b8;
+  line-height: 1.2;
+}
+
+/* Console Logs em Tempo Real (Compacto com Minimizar / Maximizar) */
+.terminal-panel-card {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.terminal-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.terminal-window-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.terminal-ctrl-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  background: rgba(30, 41, 59, 0.85);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  color: #cbd5e1;
+  font-size: 0.8rem;
+  font-weight: 800;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.18s ease;
+}
+
+.terminal-ctrl-btn:hover {
+  background: rgba(56, 189, 248, 0.22);
+  border-color: #38bdf8;
+  color: #ffffff;
+}
+
+.console-logs-container {
+  height: 130px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
   font-family: var(--font-code);
-  font-size: 0.76rem;
+  font-size: 0.78rem;
   padding-right: 4px;
+  transition: height 0.25s ease;
+}
+
+.terminal-panel-card.terminal-maximized .console-logs-container {
+  height: 340px;
+}
+
+.terminal-panel-card.terminal-minimized .console-logs-container {
+  display: none;
 }
 
 .log-entry {
@@ -430,7 +517,9 @@ body {
 .center-panel {
   display: flex;
   flex-direction: column;
+  gap: 14px;
   width: 100%;
+  min-width: 0;
 }
 
 .zigzag-board-wrapper {
@@ -485,10 +574,12 @@ body {
 
 /* Viewport com Rolagem da Trilha em Zigue-Zague */
 .zigzag-viewport {
+  flex: 1;
   width: 100%;
   min-width: 0;
   max-width: 100%;
-  height: 520px;
+  height: 390px;
+  min-height: 260px;
   overflow-y: auto;
   overflow-x: auto;
   cursor: grab;
