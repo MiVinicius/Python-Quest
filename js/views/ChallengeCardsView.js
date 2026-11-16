@@ -25,6 +25,7 @@ export class ChallengeCardsView {
         diffLabel: 'Fácil',
         icon: '🌱',
         bonus: 2,
+        coins: 10,
         penalty: 0,
         question: easyQ
       },
@@ -34,6 +35,7 @@ export class ChallengeCardsView {
         diffLabel: 'Médio',
         icon: '💎',
         bonus: 4,
+        coins: 20,
         penalty: 1,
         question: medQ
       },
@@ -43,6 +45,7 @@ export class ChallengeCardsView {
         diffLabel: 'Difícil',
         icon: '👑',
         bonus: 6,
+        coins: 35,
         penalty: 2,
         question: hardQ
       }
@@ -75,9 +78,12 @@ export class ChallengeCardsView {
                 </div>
               </div>
 
-              <div class="card-rewards-box">
-                <span class="reward-win">⚡ +${c.bonus} passos se acertar</span>
-                <span class="reward-risk">${c.penalty > 0 ? `⚠️ -${c.penalty} se errar` : '🛡️ Sem risco'}</span>
+              <div class="card-rewards-box" style="flex-direction: column; gap: 4px; align-items: stretch;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <span class="reward-win">⚡ +${c.bonus} passos</span>
+                  <span style="color: #fbbf24; font-weight: 800;">🪙 +${c.coins} moedas</span>
+                </div>
+                <span class="reward-risk" style="text-align: center;">${c.penalty > 0 ? `⚠️ -${c.penalty} casa(s) se errar` : '🛡️ Sem risco de recuo'}</span>
               </div>
 
               <button class="btn-pick-card" data-index="${idx}">

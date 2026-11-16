@@ -16,11 +16,17 @@ export class BlockWorkspaceView {
     this.boardModel = boardModel;
     
     this.onExecuteCallback = null;
-    this.onBlockChangedCallback = null;
+    this.onUnlockPythonCallback = null;
+    this.blockChangedListeners = [];
     this.isSpectatorMode = false;
+    this.tutorialFreePreview = false;
 
     this.render();
     this.setupEvents();
+  }
+
+  notifyBlockChanged() {
+    this.blockChangedListeners.forEach((cb) => cb());
   }
 
   /**
@@ -167,13 +173,24 @@ export class BlockWorkspaceView {
           </div>
         </div>
 
-        <!-- Preview do Código Python -->
+        <!-- Preview do Código Python (Desbloqueado por Turno com Moedas) -->
         <div class="python-preview-section">
           <div class="preview-header">
             <span class="terminal-title">🐍 Tradução em Python:</span>
-            <span class="badge-lang">Python 3.12</span>
+            <div class="preview-header-badges">
+              <span id="workspaceCoinsBadge" class="badge-coins" title="Moedas da partida (ganhe acertando Desafios)">🪙 10 moedas</span>
+              <span class="badge-lang">Python 3.12</span>
+            </div>
           </div>
-          <pre class="python-code-view"><code id="pythonCodeDisplay"># Arraste blocos para montar seu algoritmo...</code></pre>
+          <div class="python-preview-container">
+            <pre id="pythonCodePre" class="python-code-view is-locked-blur"><code id="pythonCodeDisplay"># Arraste blocos para montar seu algoritmo...</code></pre>
+            <div id="pythonLockOverlay" class="python-lock-overlay">
+              <span class="python-lock-title">🔒 Tradução Python Bloqueada neste Turno</span>
+              <button type="button" id="unlockPythonBtn" class="btn-unlock-python">
+                🔓 Desbloquear neste Turno (🪙 10 moedas)
+              </button>
+            </div>
+          </div>
         </div>
 
         <!-- Botão Executar -->
@@ -188,7 +205,11 @@ export class BlockWorkspaceView {
 
     this.dropzoneListEl = document.getElementById('dropzoneList');
     this.dropzoneEmptyEl = document.getElementById('dropzoneEmpty');
+    this.pythonCodePreEl = document.getElementById('pythonCodePre');
     this.pythonCodeEl = document.getElementById('pythonCodeDisplay');
+    this.pythonLockOverlayEl = document.getElementById('pythonLockOverlay');
+    this.unlockPythonBtn = document.getElementById('unlockPythonBtn');
+    this.workspaceCoinsBadgeEl = document.getElementById('workspaceCoinsBadge');
     this.executeBtn = document.getElementById('executeCodeBtn');
     this.clearBtn = document.getElementById('clearWorkspaceBtn');
     this.stepCountBadge = document.getElementById('blockCountBadge');
@@ -212,7 +233,7 @@ export class BlockWorkspaceView {
 
       this.model.addBlock({ type, value: val, condition: cond });
       this.updateUI();
-      if (this.onBlockChangedCallback) this.onBlockChangedCallback();
+      this.notifyBlockChanged();
     });
 
     // 2. Drag Start na paleta
@@ -267,7 +288,7 @@ export class BlockWorkspaceView {
         if (data.isNew && data.type) {
           this.model.addBlock({ type: data.type, value: data.value, condition: data.condition }, parentId);
           this.updateUI();
-          if (this.onBlockChangedCallback) this.onBlockChangedCallback();
+          this.notifyBlockChanged();
         }
       } catch (err) {
         console.warn('Erro ao processar drop:', err);
@@ -278,13 +299,67 @@ export class BlockWorkspaceView {
     this.clearBtn.addEventListener('click', () => {
       this.model.clear();
       this.updateUI();
-      if (this.onBlockChangedCallback) this.onBlockChangedCallback();
+      this.notifyBlockChanged();
     });
 
     // Executar
     this.executeBtn.addEventListener('click', () => {
       if (this.onExecuteCallback) this.onExecuteCallback();
     });
+
+    // Desbloquear Tradução em Python neste Turno com Moedas
+    if (this.unlockPythonBtn) {
+      this.unlockPythonBtn.addEventListener('click', () => {
+        if (!this.gameState) return;
+        const res = this.gameState.unlockPythonForTurn();
+        this.updatePythonLockState();
+        if (this.onUnlockPythonCallback) {
+          this.onUnlockPythonCallback(res);
+        }
+      });
+    }
+  }
+
+  setTutorialFreePreview(enabled) {
+    this.tutorialFreePreview = Boolean(enabled);
+    this.updatePythonLockState();
+  }
+
+  updatePythonLockState() {
+    const coins = this.gameState ? this.gameState.playerCoins : 10;
+    const cost = this.gameState ? (this.gameState.PYTHON_UNLOCK_COST || 10) : 10;
+    const isUnlocked = Boolean(
+      (this.gameState && this.gameState.pythonUnlockedThisTurn) || this.tutorialFreePreview
+    );
+
+    if (this.workspaceCoinsBadgeEl) {
+      this.workspaceCoinsBadgeEl.textContent = `🪙 ${coins} ${coins === 1 ? 'moeda' : 'moedas'}`;
+    }
+
+    const playerCoinsBadge = document.getElementById('playerCoinsBadge');
+    if (playerCoinsBadge) {
+      playerCoinsBadge.textContent = `🪙 ${coins} ${coins === 1 ? 'moeda' : 'moedas'}`;
+    }
+
+    if (!this.pythonLockOverlayEl || !this.pythonCodePreEl) return;
+
+    if (isUnlocked) {
+      this.pythonLockOverlayEl.classList.add('hidden');
+      this.pythonCodePreEl.classList.remove('is-locked-blur');
+    } else {
+      this.pythonLockOverlayEl.classList.remove('hidden');
+      this.pythonCodePreEl.classList.add('is-locked-blur');
+
+      if (this.unlockPythonBtn) {
+        if (coins >= cost) {
+          this.unlockPythonBtn.disabled = false;
+          this.unlockPythonBtn.textContent = `🔓 Desbloquear neste Turno (🪙 ${cost} moedas)`;
+        } else {
+          this.unlockPythonBtn.disabled = true;
+          this.unlockPythonBtn.textContent = `🔒 Saldo insuficiente (${coins}/${cost} 🪙 — acerte Desafios!)`;
+        }
+      }
+    }
   }
 
   updateUI() {
@@ -305,6 +380,7 @@ export class BlockWorkspaceView {
     }
 
     this.pythonCodeEl.innerHTML = this.formatPythonSyntax(this.model.toPythonCode());
+    this.updatePythonLockState();
   }
 
   /**
@@ -453,7 +529,14 @@ export class BlockWorkspaceView {
       numInput.addEventListener('change', (ev) => {
         this.model.updateBlockValue(block.id, ev.target.value);
         this.updateUI();
-        if (this.onBlockChangedCallback) this.onBlockChangedCallback();
+        this.notifyBlockChanged();
+      });
+      numInput.addEventListener('input', (ev) => {
+        if (ev.target.value !== '') {
+          this.model.updateBlockValue(block.id, ev.target.value);
+          this.updateCodeAndSteps();
+          this.notifyBlockChanged();
+        }
       });
     }
 
@@ -463,7 +546,7 @@ export class BlockWorkspaceView {
       const handleCondChange = (ev) => {
         this.model.updateBlockCondition(block.id, ev.target.value);
         this.updateUI();
-        if (this.onBlockChangedCallback) this.onBlockChangedCallback();
+        this.notifyBlockChanged();
       };
       condSelect.addEventListener('change', handleCondChange);
       condSelect.addEventListener('input', handleCondChange);
@@ -476,7 +559,7 @@ export class BlockWorkspaceView {
         const action = btn.getAttribute('data-action');
         if (this.model.moveBlock(block.id, action)) {
           this.updateUI();
-          if (this.onBlockChangedCallback) this.onBlockChangedCallback();
+          this.notifyBlockChanged();
         }
       });
     });
@@ -488,7 +571,7 @@ export class BlockWorkspaceView {
         ev.stopPropagation();
         this.model.removeBlock(block.id);
         this.updateUI();
-        if (this.onBlockChangedCallback) this.onBlockChangedCallback();
+        this.notifyBlockChanged();
       });
     }
   }
@@ -497,6 +580,7 @@ export class BlockWorkspaceView {
     const tree = this.model.evaluateTree();
     this.stepCountBadge.textContent = `${tree.formula} = ${tree.totalSteps} passo(s)`;
     this.pythonCodeEl.innerHTML = this.formatPythonSyntax(this.model.toPythonCode());
+    this.updatePythonLockState();
   }
 
   setExecuteDisabled(disabled) {
@@ -514,8 +598,14 @@ export class BlockWorkspaceView {
     this.onExecuteCallback = callback;
   }
 
+  onUnlockPython(callback) {
+    this.onUnlockPythonCallback = callback;
+  }
+
   onBlockChanged(callback) {
-    this.onBlockChangedCallback = callback;
+    if (typeof callback === 'function') {
+      this.blockChangedListeners.push(callback);
+    }
   }
 
   evaluateConditionPreview(condition) {
@@ -644,6 +734,7 @@ export class BlockWorkspaceView {
       } else if (data.phase === 'thinking' || data.phase === 'rolling' || data.phase === 'coding') {
         this.pythonCodeEl.innerHTML = this.formatPythonSyntax(`# Aguardando ${data.name || 'Oponente'} compilar seu script em Python...`);
       }
+      this.updatePythonLockState();
     } else {
       if (containerCard) containerCard.classList.remove('workspace-spectator-mode');
       if (this.spectatorBannerEl) this.spectatorBannerEl.style.display = 'none';

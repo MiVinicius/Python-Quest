@@ -106,6 +106,7 @@ python-quest/
     │   ├── ChallengeCardsView.js  # Seleção das 3 cartas de desafio
     │   ├── ChallengeModalView.js  # Modal do desafio e cronômetro
     │   ├── StatusPanelView.js     # Placar, histórico de ações e fim de jogo
+    │   ├── TutorialView.js        # Tutorial interativo guiado passo a passo na tela
     │   └── SoundView.js           # Efeitos sonoros via Web Audio API
     └── controllers/
         ├── GameController.js      # Fluxo principal da partida (Demo, Solo e Online)

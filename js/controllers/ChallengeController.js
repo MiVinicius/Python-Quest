@@ -87,6 +87,7 @@ export class ChallengeController {
         } else {
           this.startChallengeWithCard({
             bonus: 2,
+            coins: 10,
             penalty: 0,
             question: candidateQuestions[0],
             tierName: 'Comum'
@@ -128,22 +129,40 @@ export class ChallengeController {
 
   handleAnswer(selectedIndex) {
     const result = this.model.checkAnswer(selectedIndex);
-    this.view.displayFeedback(result);
 
     const bonus = this.activeCardData ? this.activeCardData.bonus : 2;
+    const baseCoins = this.activeCardData ? (this.activeCardData.coins || 10) : 10;
     const penalty = this.activeCardData ? this.activeCardData.penalty : 0;
     const tierName = this.activeCardData ? this.activeCardData.tierName : 'Padrão';
 
     if (result.correct) {
       this.sound.playCompileSuccess();
       this.gameState.playerBoost = bonus;
-      this.gameState.addLog('Você', `Acertou o desafio da Carta [${tierName}]! Ganhou +${bonus} de bônus no próximo dado! 🚀`, 'success');
+      this.gameState.challengeStreak = (this.gameState.challengeStreak || 0) + 1;
+      const streakBonus = this.gameState.challengeStreak >= 2 ? 5 : 0;
+      const totalCoinsEarned = baseCoins + streakBonus;
+      const newBalance = this.gameState.addCoins(totalCoinsEarned);
+      result.coinsEarned = totalCoinsEarned;
+
+      const streakText = streakBonus > 0 ? ` (+${streakBonus} 🪙 bônus de sequência!)` : '';
+      this.gameState.addLog(
+        'Você',
+        `Acertou o desafio da Carta [${tierName}]! Ganhou +${bonus} de bônus no dado e +${totalCoinsEarned} moedas${streakText} (Saldo: 🪙 ${newBalance})! 🚀`,
+        'success'
+      );
+
+      const wsCoins = document.getElementById('workspaceCoinsBadge');
+      const plCoins = document.getElementById('playerCoinsBadge');
+      const coinText = `🪙 ${newBalance} ${newBalance === 1 ? 'moeda' : 'moedas'}`;
+      if (wsCoins) wsCoins.textContent = coinText;
+      if (plCoins) plCoins.textContent = coinText;
       
       if (this.profileModel) {
         this.profileModel.recordChallenge(true);
       }
     } else {
       this.sound.playCompileError();
+      this.gameState.challengeStreak = 0;
       if (penalty > 0) {
         this.gameState.advancePlayer(-penalty);
         this.gameState.addLog('Você', `Errou a Carta [${tierName}]! Sofreu penalidade de recuo de ${penalty} casa(s). ⚠️`, 'danger');
@@ -155,6 +174,8 @@ export class ChallengeController {
         this.profileModel.recordChallenge(false);
       }
     }
+
+    this.view.displayFeedback(result);
 
     this.statusView.updateStatusBadges(
       this.gameState.playerBoost,
@@ -188,6 +209,7 @@ export class ChallengeController {
 
     this.view.displayFeedback(feedback);
     this.sound.playCompileError();
+    this.gameState.challengeStreak = 0;
     this.gameState.playerStunned = true;
     this.gameState.addLog('Tempo', 'Tempo esgotado no Time Attack! Você foi atordoado e perderá o próximo turno.', 'danger');
     

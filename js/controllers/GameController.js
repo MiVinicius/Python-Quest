@@ -25,6 +25,7 @@ export class GameController {
     statusView,
     soundView,
     homeView,
+    tutorialView,
     codingController,
     challengeController
   }) {
@@ -44,6 +45,7 @@ export class GameController {
     this.statusView = statusView;
     this.sound = soundView;
     this.homeView = homeView;
+    this.tutorialView = tutorialView;
 
     this.codingCtrl = codingController;
     this.challengeCtrl = challengeController;
@@ -72,6 +74,39 @@ export class GameController {
 
     // Execução de blocos compilados
     this.codingCtrl.onValidExecution((steps, actions) => this.handlePlayerMove(steps, actions));
+
+    // Monitoramento reativo dos blocos e desbloqueio de Python para o Tutorial e Economia
+    if (this.workspaceView) {
+      this.workspaceView.onBlockChanged(() => this.handleTutorialBlockChange());
+      this.workspaceView.onUnlockPython((res) => {
+        if (res && res.success) {
+          this.sound.playCompileSuccess();
+          this.gameState.addLog(
+            'Economia',
+            `🔓 Tradução em Python desbloqueada para este turno (-${res.cost || 10} 🪙). Saldo restante: 🪙 ${res.remainingCoins} moedas.`,
+            'success'
+          );
+          this.updateAllViews();
+        } else {
+          this.sound.playCompileError();
+          this.gameState.addLog(
+            'Economia',
+            `🔒 Moedas insuficientes! Você precisa de 🪙 ${res?.cost || 10} moedas (acerte desafios na trilha para ganhar mais).`,
+            'warning'
+          );
+        }
+      });
+    }
+
+    // Botão no cabeçalho da Arena para iniciar o Tutorial a qualquer momento
+    const openTutorialBtn = document.getElementById('openTutorialBtn');
+    if (openTutorialBtn) {
+      openTutorialBtn.addEventListener('click', () => {
+        if (!this.isOnline) {
+          this.startInteractiveTutorial();
+        }
+      });
+    }
 
     // Repassa ao oponente (multiplayer) o desafio que o jogador está respondendo
     this.challengeCtrl.onChallengeEvent = (type, data) => {
@@ -141,6 +176,7 @@ export class GameController {
       `🎯 Modo Demonstração iniciado (Trilha reduzida de ${totalTiles} casas contra o ${this.opponentName})! Ideal para avaliação rápida de todas as mecânicas.`,
       'success'
     );
+    this.promptInteractiveTutorial();
   }
 
   startSoloGame() {
@@ -166,6 +202,73 @@ export class GameController {
     this.syncPlayerIdentity();
     this.restartGame();
     this.gameState.addLog('Python Quest', `Partida Solo iniciada contra o ${this.opponentName} (64 Casas)!`, 'info');
+    this.promptInteractiveTutorial();
+  }
+
+  promptInteractiveTutorial() {
+    if (!this.tutorialView || this.isOnline) return;
+    this.tutorialView.promptTutorial({
+      onAccept: () => {
+        this.startInteractiveTutorial();
+      },
+      onDecline: () => {
+        this.gameState.addLog('Tutorial', 'Tutorial ignorado. Boa partida!', 'info');
+      }
+    });
+  }
+
+  startInteractiveTutorial() {
+    if (!this.tutorialView || this.isOnline) return;
+
+    // Se o jogador já tinha rolado o dado neste turno, reseta o turno atual para começar da Etapa 1 (Rolar Dado)
+    if (this.gameState.currentTurn !== 'player' || this.gameState.phase !== 'waiting_roll') {
+      this.restartGame();
+    } else {
+      this.blockModel.clear();
+      this.workspaceView.updateUI();
+      this.codingCtrl.lockCoding();
+    }
+
+    this.gameState.addLog('Tutorial', '🎓 Modo Tutorial Interativo iniciado! Siga as 4 etapas destacadas na tela.', 'warning');
+
+    this.tutorialView.start({
+      onSkip: () => {
+        if (this.workspaceView) this.workspaceView.setTutorialFreePreview(false);
+        if (this.gameState.currentTurn === 'player' && this.gameState.phase === 'coding') {
+          this.codingCtrl.unlockCoding();
+        }
+        this.gameState.addLog('Tutorial', 'Tutorial encerrado. Você já pode jogar livremente!', 'info');
+      },
+      onStep3Confirmed: () => {
+        this.codingCtrl.unlockCoding();
+        this.tutorialView.showStep4();
+      }
+    });
+  }
+
+  handleTutorialBlockChange() {
+    if (!this.tutorialView || !this.tutorialView.isActive) return;
+    if (this.gameState.currentTurn !== 'player' || this.gameState.phase !== 'coding') return;
+
+    const targetSteps = this.gameState.lastDiceValue;
+    const tree = this.blockModel.evaluateTree();
+    const validation = this.blockModel.validateAgainstDice(targetSteps);
+
+    if (this.tutorialView.currentStep === 2) {
+      this.tutorialView.showStep2(targetSteps, tree.totalSteps);
+      if (validation.valid) {
+        this.sound.playCompileSuccess();
+        this.codingCtrl.lockCoding();
+        if (this.workspaceView) this.workspaceView.setTutorialFreePreview(true);
+        this.tutorialView.showStep3(this.blockModel.toPythonCode());
+      }
+    } else if (this.tutorialView.currentStep === 3 || this.tutorialView.currentStep === 4) {
+      if (!validation.valid) {
+        this.codingCtrl.lockCoding();
+        if (this.workspaceView) this.workspaceView.setTutorialFreePreview(false);
+        this.tutorialView.showStep2(targetSteps, tree.totalSteps);
+      }
+    }
   }
 
   startOnlineGame(roomCode, playerRole, hostInfo, guestInfo) {
@@ -360,6 +463,9 @@ export class GameController {
   }
 
   returnToHome() {
+    if (this.tutorialView) {
+      this.tutorialView.stop();
+    }
     this.gameState.setPhase('game_over');
     if (this.onlineModel) {
       this.onlineModel.leaveRoom();
@@ -402,6 +508,7 @@ export class GameController {
     this.boardView.updatePawns(this.gameState.playerPos, this.gameState.botPos);
     if (this.workspaceView) {
       this.workspaceView.updateUI();
+      this.workspaceView.updatePythonLockState();
     }
   }
 
@@ -409,7 +516,9 @@ export class GameController {
     if (this.gameState.phase === 'game_over') return;
 
     this.gameState.currentTurn = 'player';
+    this.gameState.pythonUnlockedThisTurn = false;
     if (this.workspaceView) {
+      this.workspaceView.setTutorialFreePreview(false);
       this.workspaceView.setSpectatorMode(false);
     }
     this.boardView.hideOpponentWindow();
@@ -475,9 +584,21 @@ export class GameController {
 
     this.codingCtrl.unlockCoding();
     this.updateAllViews();
+
+    // Se estiver na Etapa 1 do Tutorial Interativo, avança para a Etapa 2 e mantém Executar bloqueado até concluir as Etapas 2 e 3
+    if (this.tutorialView && this.tutorialView.isActive && this.tutorialView.currentStep === 1) {
+      this.codingCtrl.lockCoding();
+      const tree = this.blockModel.evaluateTree();
+      this.tutorialView.showStep2(result.total, tree.totalSteps);
+    }
   }
 
   async handlePlayerMove(steps, actions = []) {
+    const wasTutorialStep4 = Boolean(this.tutorialView && this.tutorialView.isActive && this.tutorialView.currentStep >= 2);
+    if (wasTutorialStep4) {
+      this.tutorialView.clearHighlights();
+    }
+
     this.gameState.setPhase('moving');
     this.diceView.hideEnergy();
 
@@ -577,6 +698,12 @@ export class GameController {
     // Limpa workspace após compilar e mover
     this.blockModel.clear();
     this.workspaceView.updateUI();
+
+    if (wasTutorialStep4 && this.tutorialView && this.tutorialView.isActive) {
+      if (this.workspaceView) this.workspaceView.setTutorialFreePreview(false);
+      this.tutorialView.showCompletedBanner();
+      this.gameState.addLog('Tutorial', '🎉 Tutorial concluído com sucesso! Continue jogando normalmente.', 'success');
+    }
 
     await this.handleTileLanding('player', newPos, { jumped: hasJump });
   }

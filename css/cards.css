@@ -175,7 +175,7 @@
 }
 
 .card-rarity-badge {
-  font-size: 0.72rem;
+  font-size: 0.78rem;
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 1px;
@@ -184,8 +184,8 @@
 }
 
 .card-category-tag {
-  font-size: 0.75rem;
-  color: #94a3b8;
+  font-size: 0.8rem;
+  color: #cbd5e1;
   font-family: var(--font-code);
 }
 

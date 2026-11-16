@@ -19,7 +19,8 @@ import { ChallengeModalView } from './views/ChallengeModalView.js';
 import { ChallengeCardsView } from './views/ChallengeCardsView.js';
 import { StatusPanelView } from './views/StatusPanelView.js';
 import { SoundView } from './views/SoundView.js';
-import { HomeView } from './views/HomeView.js?v=0.3.2';
+import { HomeView } from './views/HomeView.js?v=0.3.5';
+import { TutorialView } from './views/TutorialView.js?v=0.3.5';
 
 import { CodingController } from './controllers/CodingController.js';
 import { ChallengeController } from './controllers/ChallengeController.js';
@@ -45,6 +46,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const challengeView = new ChallengeModalView();
   const cardsView = new ChallengeCardsView('challengeCardsModal');
   const statusView = new StatusPanelView();
+  const tutorialView = new TutorialView();
 
   // 3. Instanciação dos Sub-Controllers
   const codingController = new CodingController(
@@ -82,6 +84,7 @@ document.addEventListener('DOMContentLoaded', () => {
     statusView,
     soundView,
     homeView,
+    tutorialView,
     codingController,
     challengeController
   });
@@ -217,4 +220,40 @@ document.addEventListener('DOMContentLoaded', () => {
   document.body.addEventListener('click', () => {
     soundView.init();
   }, { once: true });
+
+  // Controle de acessibilidade: Tamanho da Fonte (IHM)
+  const FONT_SCALE_KEY = 'python_quest_font_scale';
+  const DEFAULT_SCALE = 110;
+  const MIN_SCALE = 90;
+  const MAX_SCALE = 140;
+  const STEP_SCALE = 10;
+
+  const btnFontDecrease = document.getElementById('btnFontDecrease');
+  const btnFontIncrease = document.getElementById('btnFontIncrease');
+  const btnFontReset = document.getElementById('btnFontReset');
+
+  const clampScale = (val) => Math.max(MIN_SCALE, Math.min(MAX_SCALE, val));
+
+  let currentFontScale = DEFAULT_SCALE;
+  try {
+    const saved = parseInt(localStorage.getItem(FONT_SCALE_KEY), 10);
+    if (!Number.isNaN(saved)) currentFontScale = clampScale(saved);
+  } catch (_) {}
+
+  const applyFontScale = (scale) => {
+    currentFontScale = clampScale(scale);
+    document.documentElement.style.fontSize = `${currentFontScale}%`;
+    if (btnFontReset) btnFontReset.textContent = `${currentFontScale}%`;
+    if (btnFontDecrease) btnFontDecrease.disabled = currentFontScale <= MIN_SCALE;
+    if (btnFontIncrease) btnFontIncrease.disabled = currentFontScale >= MAX_SCALE;
+    try {
+      localStorage.setItem(FONT_SCALE_KEY, String(currentFontScale));
+    } catch (_) {}
+  };
+
+  applyFontScale(currentFontScale);
+
+  btnFontDecrease?.addEventListener('click', () => applyFontScale(currentFontScale - STEP_SCALE));
+  btnFontIncrease?.addEventListener('click', () => applyFontScale(currentFontScale + STEP_SCALE));
+  btnFontReset?.addEventListener('click', () => applyFontScale(DEFAULT_SCALE));
 });

@@ -193,7 +193,8 @@ export class ChallengeModalView {
     if (result.correct) {
       this.feedbackArea.className = 'challenge-feedback feedback-success';
       this.feedbackIcon.textContent = '🎉';
-      this.feedbackTitle.textContent = 'Resposta Correta! Boost Ativado!';
+      const coinsMsg = result.coinsEarned ? ` (+${result.coinsEarned} 🪙)` : '';
+      this.feedbackTitle.textContent = `Resposta Correta! Boost Ativado${coinsMsg}!`;
     } else {
       this.feedbackArea.className = 'challenge-feedback feedback-error';
       this.feedbackIcon.textContent = '⚠️';
