@@ -19,8 +19,8 @@ import { ChallengeModalView } from './views/ChallengeModalView.js';
 import { ChallengeCardsView } from './views/ChallengeCardsView.js';
 import { StatusPanelView } from './views/StatusPanelView.js';
 import { SoundView } from './views/SoundView.js';
-import { HomeView } from './views/HomeView.js?v=0.3.9';
-import { TutorialView } from './views/TutorialView.js?v=0.3.9';
+import { HomeView } from './views/HomeView.js?v=0.4.0';
+import { TutorialView } from './views/TutorialView.js?v=0.4.0';
 
 import { CodingController } from './controllers/CodingController.js';
 import { ChallengeController } from './controllers/ChallengeController.js';
@@ -222,8 +222,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }, { once: true });
 
   // Controle de acessibilidade: Tamanho da Fonte (IHM)
-  const FONT_SCALE_KEY = 'python_quest_font_scale';
-  const DEFAULT_SCALE = 110;
+  const FONT_SCALE_KEY = 'python_quest_font_scale_v2';
+  const DEFAULT_SCALE = 100;
   const MIN_SCALE = 90;
   const MAX_SCALE = 140;
   const STEP_SCALE = 10;

@@ -23,6 +23,8 @@ export class OnlineMultiplayerModel {
     this.PeerClass = null;
     this.peer = null;
     this.dataConn = null;
+    this.activeConnections = [];
+    this.pendingOutgoingQueue = [];
     this.mmPeer = null;
 
     // Canal local para sincronização instantânea entre abas
@@ -147,8 +149,51 @@ export class OnlineMultiplayerModel {
     }
   }
 
+  registerActiveConn(conn) {
+    if (!conn) return;
+    this.dataConn = conn;
+    if (!this.activeConnections.includes(conn)) {
+      this.activeConnections.push(conn);
+    }
+    this.flushPendingOutgoing();
+  }
+
+  flushPendingOutgoing() {
+    if (!this.pendingOutgoingQueue.length) return;
+    const openConns = this.activeConnections.filter(c => c && c.open);
+    if (!openConns.length && !(this.dataConn && this.dataConn.open)) return;
+
+    while (this.pendingOutgoingQueue.length > 0) {
+      const pkt = this.pendingOutgoingQueue.shift();
+      this.sendRawWebRTC(pkt);
+    }
+  }
+
+  sendRawWebRTC(pkt) {
+    const targets = new Set(this.activeConnections.filter(c => c && c.open));
+    if (this.dataConn && this.dataConn.open) {
+      targets.add(this.dataConn);
+    }
+    if (targets.size === 0) {
+      this.pendingOutgoingQueue.push(pkt);
+      return;
+    }
+    targets.forEach((conn) => {
+      try {
+        conn.send(pkt);
+      } catch (e) {
+        console.warn('Erro ao enviar pacote WebRTC:', e);
+      }
+    });
+  }
+
   setupDataConnection(conn, roomStateRef = null) {
+    if (conn.open) {
+      this.registerActiveConn(conn);
+    }
+
     conn.on('open', () => {
+      this.registerActiveConn(conn);
       // Se somos guest, enviamos nossos dados de entrada
       if (this.playerRole === 'guest' && this.pendingGuestProfile) {
         conn.send({
@@ -160,6 +205,7 @@ export class OnlineMultiplayerModel {
     });
 
     conn.on('data', (data) => {
+      this.registerActiveConn(conn);
       if (!data || typeof data !== 'object') return;
 
       if (data.type === 'P2P_JOIN_REQUEST' && this.playerRole === 'host') {
@@ -169,6 +215,7 @@ export class OnlineMultiplayerModel {
         };
         room.guest = data.guest;
         room.status = 'ready';
+        this.roomCode = room.code || this.roomCode;
         this.saveLocalRoom(room);
 
         // Confirma entrada para o guest via WebRTC
@@ -181,6 +228,11 @@ export class OnlineMultiplayerModel {
         this.clearQuickMatchQueueIfMine();
         this.notifyListeners({ type: 'OPPONENT_CONNECTED', room });
       } else if (data.type === 'P2P_JOIN_ACCEPTED' && this.playerRole === 'guest') {
+        if (data.room && data.room.code) {
+          this.roomCode = data.room.code;
+        } else if (data.roomCode) {
+          this.roomCode = data.roomCode;
+        }
         this.saveLocalRoom(data.room);
         if (this.pendingJoinResolve) {
           const resolve = this.pendingJoinResolve;
@@ -338,7 +390,13 @@ export class OnlineMultiplayerModel {
   }
 
   async tryJoinOrHostP2PMatchmaking(Peer, userProfile) {
-    const SLOTS = ['pq-mm-2026-slot-1', 'pq-mm-2026-slot-2'];
+    const SLOTS = [
+      'pq-mm-2026-slot-1',
+      'pq-mm-2026-slot-2',
+      'pq-mm-2026-slot-3',
+      'pq-mm-2026-slot-4',
+      'pq-mm-2026-slot-5'
+    ];
 
     for (const slotId of SLOTS) {
       if (!this.isQuickMatchSearching) return null;
@@ -380,7 +438,8 @@ export class OnlineMultiplayerModel {
       });
 
       if (slotAttempt.status === 'claimed_host') {
-        // Assumimos o slot público! Criamos a sala local e escutamos conexões P2P neste slot
+        // Assumimos o slot público! Criamos a sala local e escutamos conexões P2P neste slot.
+        // IMPORTANTE: Mantemos this.mmPeer vivo durante toda a partida para não fechar o DataChannel ativo!
         const room = await this.createRoom(userProfile);
         this.setQuickMatchWaitingRoom(room.code);
         this.mmPeer = slotAttempt.peer;
@@ -388,13 +447,6 @@ export class OnlineMultiplayerModel {
         this.mmPeer.on('connection', (conn) => {
           this.dataConn = conn;
           this.setupDataConnection(conn, room);
-          // Assim que o oponente conectar, libera o slot de matchmaking para outros jogadores
-          setTimeout(() => {
-            if (this.mmPeer) {
-              try { this.mmPeer.destroy(); } catch (e) {}
-              this.mmPeer = null;
-            }
-          }, 1500);
         });
 
         return {
@@ -541,21 +593,16 @@ export class OnlineMultiplayerModel {
 
     this.processedActionIds.add(action.actionId);
 
-    // 1. Envia via WebRTC DataChannel (se conectado entre dispositivos diferentes)
-    if (this.dataConn && this.dataConn.open) {
-      try {
-        this.dataConn.send(action);
-      } catch (e) {
-        console.warn('Erro ao enviar pacote WebRTC:', e);
-      }
-    }
+    // 1. Envia via WebRTC DataChannel (com fila se a conexão ainda estiver abrindo)
+    this.sendRawWebRTC(action);
 
     // 2. Envia no BroadcastChannel + Storage Event (para abas locais)
     this.broadcastMessage(action);
   }
 
   handleIncomingMessage(data) {
-    if (!data || data.roomCode !== this.roomCode) return;
+    if (!data) return;
+    if (data.roomCode && this.roomCode && data.roomCode !== this.roomCode) return;
 
     if (data.type === 'GUEST_JOINED' && this.playerRole === 'host') {
       if (data.actionId && this.processedActionIds.has(data.actionId)) return;
@@ -610,6 +657,11 @@ export class OnlineMultiplayerModel {
   }
 
   cleanupPeers() {
+    this.activeConnections.forEach((conn) => {
+      try { conn.close(); } catch (e) {}
+    });
+    this.activeConnections = [];
+    this.pendingOutgoingQueue = [];
     if (this.dataConn) {
       try { this.dataConn.close(); } catch (e) {}
       this.dataConn = null;

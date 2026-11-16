@@ -58,6 +58,7 @@ export class GameController {
     this.opponentAvatar = '🤖';
     this.myInfo = null;
     this.opponentInfo = null;
+    this.remoteActionChain = Promise.resolve();
   }
 
   async init() {
@@ -116,11 +117,13 @@ export class GameController {
       }
     };
 
-    // Ouvinte de eventos remotos do Multiplayer Online
+    // Ouvinte de eventos remotos do Multiplayer Online (processados em fila sequencial)
     if (this.onlineModel) {
       this.onlineModel.onStateChange((event) => {
         if (event.type === 'REMOTE_ACTION' && this.isOnline) {
-          this.handleRemoteAction(event);
+          this.remoteActionChain = this.remoteActionChain
+            .then(() => this.handleRemoteAction(event))
+            .catch((err) => console.error('Erro ao processar ação remota:', err));
         }
       });
     }
@@ -296,9 +299,25 @@ export class GameController {
     const isHost = (playerRole === 'host');
     this.myInfo = isHost ? hostInfo : guestInfo;
     this.opponentInfo = isHost ? guestInfo : hostInfo;
+    this.remoteActionChain = Promise.resolve();
 
-    this.opponentName = this.opponentInfo ? this.opponentInfo.nickname : (isHost ? 'Convidado' : 'Anfitrião');
-    this.opponentAvatar = this.opponentInfo ? this.opponentInfo.avatar : '🦊';
+    const myNick = (this.userProfile?.data?.nickname || this.myInfo?.nickname || 'Você').trim();
+    const myAv = this.userProfile?.data?.avatar || this.myInfo?.avatar || '🐍';
+
+    let rawOpName = (this.opponentInfo ? this.opponentInfo.nickname : (isHost ? 'Convidado' : 'Anfitrião')).trim();
+    let rawOpAvatar = this.opponentInfo ? this.opponentInfo.avatar : '🦊';
+
+    // Desambiguação automática caso os dois jogadores tenham o mesmo nome ou o mesmo avatar
+    if (rawOpName.toLowerCase() === myNick.toLowerCase()) {
+      rawOpName = `${rawOpName} (Oponente)`;
+    }
+    if (rawOpAvatar === myAv) {
+      const altAvatars = ['🦊', '🤖', '🦅', '🐱', '🐍'].filter(a => a !== myAv);
+      rawOpAvatar = altAvatars[0] || '🦊';
+    }
+
+    this.opponentName = rawOpName;
+    this.opponentAvatar = rawOpAvatar;
 
     this.syncPlayerIdentity();
     this.gameState.reset();
@@ -432,8 +451,28 @@ export class GameController {
         this.gameState.botPos = payload.newPos;
         this.updateAllViews();
       }
+    } else if (action === 'TILE_EFFECT') {
+      const oldPos = this.gameState.botPos;
+      const targetPos = typeof payload.newPos === 'number' ? payload.newPos : oldPos;
+      this.gameState.botPos = targetPos;
+      this.boardView.triggerTileEffect(oldPos, payload.kind === 'shortcut' ? 'shortcut' : 'trap');
+      this.gameState.addLog(
+        'Multiplayer',
+        `${this.opponentName} ativou ${payload.label || 'casa especial'} (${payload.deltaSteps > 0 ? `+${payload.deltaSteps}` : payload.deltaSteps} casas)!`,
+        payload.kind === 'shortcut' ? 'warning' : 'info'
+      );
+      await this.boardView.animateStepByStep('bot', oldPos, targetPos, (curr) => {
+        this.sound.playStep();
+        this.statusView.updateProgress(this.gameState.playerPos, curr, this.gameState.TOTAL_TILES);
+      });
+      if (targetPos >= this.gameState.TOTAL_TILES) {
+        this.handleGameOver('bot');
+      }
     } else if (action === 'END_TURN') {
       if (this.gameState.phase === 'game_over') return;
+      if (typeof payload.finalPos === 'number' && payload.finalPos !== this.gameState.botPos) {
+        this.gameState.botPos = payload.finalPos;
+      }
       this.gameState.roundCount = payload.round || this.gameState.roundCount;
       this.gameState.addLog('Multiplayer', `É a sua vez de jogar! Role o dado.`, 'success');
       this.startPlayerTurn();
@@ -448,7 +487,7 @@ export class GameController {
     const trackPawn = document.getElementById('raceTrackPlayer');
 
     if (avatarEl) avatarEl.textContent = data.avatar;
-    if (nameEl) nameEl.textContent = data.nickname;
+    if (nameEl) nameEl.textContent = `${data.nickname} (Você)`;
     if (trackPawn) trackPawn.textContent = data.avatar;
 
     const opAvatarEl = document.getElementById('opponentAvatarIcon');
@@ -459,7 +498,7 @@ export class GameController {
     if (opNameEl) opNameEl.textContent = this.opponentName;
     if (opTrackPawn) opTrackPawn.textContent = this.opponentAvatar;
 
-    this.boardView.setPlayerProfile(data.avatar, data.nickname);
+    this.boardView.setPlayerProfile(data.avatar, 'VOCÊ');
     this.boardView.setOpponentProfile(this.opponentAvatar, this.opponentName);
   }
 
@@ -739,6 +778,16 @@ export class GameController {
         this.userProfile.addTilesTraveled(targetPos - currentPos);
       }
 
+      if (entity === 'player' && this.isOnline && this.onlineModel) {
+        this.onlineModel.sendTurnAction('TILE_EFFECT', {
+          kind: 'shortcut',
+          label: tile.label,
+          deltaSteps: extraSteps,
+          oldPos: currentPos,
+          newPos: targetPos
+        });
+      }
+
       await this.boardView.animateStepByStep(entity, currentPos, targetPos, (curr) => {
         this.sound.playStep();
         this.statusView.updateProgress(
@@ -784,6 +833,16 @@ export class GameController {
         const currentPos = entity === 'player' ? this.gameState.playerPos : this.gameState.botPos;
         const targetPos = entity === 'player' ? this.gameState.advancePlayer(penaltySteps) : this.gameState.advanceBot(penaltySteps);
 
+        if (entity === 'player' && this.isOnline && this.onlineModel) {
+          this.onlineModel.sendTurnAction('TILE_EFFECT', {
+            kind: 'trap',
+            label: tile.label,
+            deltaSteps: penaltySteps,
+            oldPos: currentPos,
+            newPos: targetPos
+          });
+        }
+
         await this.boardView.animateStepByStep(entity, currentPos, targetPos, (curr) => {
           this.sound.playStep();
           this.statusView.updateProgress(
@@ -812,7 +871,10 @@ export class GameController {
         if (this.isOnline) {
           // Em multiplayer online, avisa o oponente que o turno acabou e aguarda
           if (this.onlineModel) {
-            this.onlineModel.sendTurnAction('END_TURN', { round: this.gameState.roundCount });
+            this.onlineModel.sendTurnAction('END_TURN', {
+              round: this.gameState.roundCount,
+              finalPos: this.gameState.playerPos
+            });
           }
           this.gameState.currentTurn = 'bot';
           this.diceView.setDisabled(true);

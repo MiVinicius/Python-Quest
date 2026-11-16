@@ -10,12 +10,26 @@ export class UserProfileModel {
     this.initAccountSession();
   }
 
+  getSessionGuestTag() {
+    try {
+      let tag = sessionStorage.getItem('python_quest_guest_tag');
+      if (!tag) {
+        tag = String(Math.floor(100 + Math.random() * 900));
+        sessionStorage.setItem('python_quest_guest_tag', tag);
+      }
+      return tag;
+    } catch (_) {
+      return String(Math.floor(100 + Math.random() * 900));
+    }
+  }
+
   getDefaultProfile() {
     const session = this.authService ? this.authService.getCurrentUser() : null;
+    const guestTag = this.getSessionGuestTag();
     return {
       username: session ? session.username : null,
       isLoggedIn: Boolean(session),
-      nickname: session ? session.nickname : 'PythonDev',
+      nickname: session ? session.nickname : `Convidado #${guestTag}`,
       avatar: session ? session.avatar : '🐍', // 🐍, 🤖, 🦊, 🦅, 🐱
       avatarName: 'Cyber Snake',
       career: {
@@ -78,10 +92,15 @@ export class UserProfileModel {
       const stored = localStorage.getItem(this.STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
+        const def = this.getDefaultProfile();
+        // Se for convidado e estiver com o nome genérico antigo "PythonDev" ou "Convidado #...", usa a tag única desta aba
+        if (!parsed.isLoggedIn && (!parsed.nickname || parsed.nickname === 'PythonDev' || /^Convidado #\d+$/.test(parsed.nickname))) {
+          parsed.nickname = def.nickname;
+        }
         this.data = {
-          ...this.getDefaultProfile(),
+          ...def,
           ...parsed,
-          career: { ...this.getDefaultProfile().career, ...(parsed.career || {}) },
+          career: { ...def.career, ...(parsed.career || {}) },
           achievements: this.mergeAchievements(parsed.achievements)
         };
       }
