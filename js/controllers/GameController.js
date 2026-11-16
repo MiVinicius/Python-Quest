@@ -63,6 +63,7 @@ export class GameController {
   async init() {
     this.statusView.init();
     this.statusView.onRestart(() => this.restartGame());
+    this.statusView.onReturnHome(() => this.returnToHome());
 
     // Terminal de eventos reativo
     this.gameState.onLog((entry) => {
@@ -148,7 +149,7 @@ export class GameController {
   }
 
   startDemoGame() {
-    this.gameMode = 'Demonstração (22 Casas)';
+    this.gameMode = 'Demonstração (32 Casas)';
     this.isOnline = false;
     this.isDemo = true;
     this.playerRole = 'solo';
@@ -167,7 +168,7 @@ export class GameController {
     if (diffSelect) diffSelect.style.display = 'inline-block';
     if (restartBtn) restartBtn.style.display = 'inline-block';
     if (roomBadge) roomBadge.style.display = 'inline-flex';
-    if (roomBadgeText) roomBadgeText.textContent = '🎯 Modo Demonstração (22 Casas)';
+    if (roomBadgeText) roomBadgeText.textContent = '🎯 Modo Demonstração (32 Casas)';
 
     this.syncPlayerIdentity();
     this.restartGame();
@@ -487,6 +488,11 @@ export class GameController {
   updateAllViews() {
     this.statusView.updateProgress(this.gameState.playerPos, this.gameState.botPos, this.gameState.TOTAL_TILES);
     this.statusView.updateTurn(this.gameState.currentTurn, this.gameState.roundCount, this.isOnline, this.opponentName);
+    if (this.diceView) {
+      this.diceView.setPlayerTurnHighlight(
+        this.gameState.currentTurn === 'player' && this.gameState.phase !== 'game_over'
+      );
+    }
     
     // Atualiza crachás de status (Boost, Stun e Escudo)
     this.statusView.updateStatusBadges(

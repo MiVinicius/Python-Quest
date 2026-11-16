@@ -3,20 +3,20 @@
  * Mapeamento da Trilha em Zigue-Zague Descendente:
  * Suporta:
  * - Modo Completo ('full'): 64 casas (8 ciclos de 6 horizontais + 2 verticais)
- * - Modo Demonstração ('demo'): 22 casas (3 corredores horizontais de 6 casas + 2 descidas de 2 casas),
- *   com alta densidade de desafios, atalhos e bugs para avaliação rápida contra o robô.
+ * - Modo Demonstração ('demo'): 32 casas (4 ciclos completos de 6 horizontais + 2 verticais),
+ *   com alta densidade de desafios, atalhos e bugs sem colisão de destinos.
  */
 export class BoardModel {
   constructor(mode = 'full') {
     this.GRID_COLS = 6;
     this.mode = mode;
-    this.TOTAL_TILES = mode === 'demo' ? 22 : 64;
+    this.TOTAL_TILES = mode === 'demo' ? 32 : 64;
     this.tiles = this.generateTiles(mode);
   }
 
   setBoardMode(mode = 'full') {
     this.mode = mode === 'demo' ? 'demo' : 'full';
-    this.TOTAL_TILES = this.mode === 'demo' ? 22 : 64;
+    this.TOTAL_TILES = this.mode === 'demo' ? 32 : 64;
     this.tiles = this.generateTiles(this.mode);
     return this.TOTAL_TILES;
   }
@@ -24,39 +24,41 @@ export class BoardModel {
   generateTiles(mode = this.mode) {
     const tiles = {};
     const isDemo = (mode === 'demo');
-    const total = isDemo ? 22 : 64;
+    const total = isDemo ? 32 : 64;
     this.TOTAL_TILES = total;
 
-    // Atalhos estratégicos
+    // Atalhos estratégicos (todos pousam em casas normais)
     const shortcuts = isDemo
       ? {
-          4: { bonus: 2, label: 'Atalho: Algoritmo O(1) (+2)' },
-          13: { bonus: 3, label: 'Atalho: Turbo Cache (+3)' }
+          5: { bonus: 3, label: 'Atalho: Algoritmo O(1) (+3)' },     // 5 + 3 = 8 (normal)
+          13: { bonus: 3, label: 'Atalho: Turbo Cache (+3)' },       // 13 + 3 = 16 (normal)
+          23: { bonus: 3, label: 'Atalho: Refatoração Limpa (+3)' }  // 23 + 3 = 26 (normal)
         }
       : {
-          5: { bonus: 3, label: 'Atalho: Algoritmo O(1) (+3)' },
-          19: { bonus: 4, label: 'Atalho: Turbo Cache (+4)' },
-          34: { bonus: 3, label: 'Atalho: Refatoração Limpa (+3)' },
-          52: { bonus: 4, label: 'Atalho: Otimização de GPU (+4)' }
+          5: { bonus: 3, label: 'Atalho: Algoritmo O(1) (+3)' },     // 5 + 3 = 8 (normal)
+          19: { bonus: 4, label: 'Atalho: Turbo Cache (+4)' },       // 19 + 4 = 23 (normal)
+          34: { bonus: 3, label: 'Atalho: Refatoração Limpa (+3)' }, // 34 + 3 = 37 (normal)
+          52: { bonus: 4, label: 'Atalho: Otimização de GPU (+4)' }  // 52 + 4 = 56 (normal)
         };
 
-    // Armadilhas / Bugs
+    // Armadilhas / Bugs (todos recuam para casas normais)
     const traps = isDemo
       ? {
-          8: { penalty: 2, label: 'Bug: Memory Leak (-2)' },
-          16: { penalty: 3, label: 'Bug: Recursão Infinita (-3)' }
+          9: { penalty: 2, label: 'Bug: Memory Leak (-2)' },          // 9 - 2 = 7 (normal)
+          18: { penalty: 3, label: 'Bug: Recursão Infinita (-3)' },   // 18 - 3 = 15 (normal)
+          28: { penalty: 3, label: 'Bug: NullPointerException (-3)' } // 28 - 3 = 25 (normal)
         }
       : {
-          12: { penalty: 3, label: 'Bug: Memory Leak (-3)' },
-          26: { penalty: 4, label: 'Bug: Recursão Infinita (-4)' },
-          44: { penalty: 3, label: 'Bug: NullPointerException (-3)' },
-          59: { penalty: 5, label: 'Bug Crítico: Kernel Panic (-5)' }
+          12: { penalty: 3, label: 'Bug: Memory Leak (-3)' },         // 12 - 3 = 9 (normal)
+          26: { penalty: 4, label: 'Bug: Recursão Infinita (-4)' },   // 26 - 4 = 22 (normal)
+          44: { penalty: 3, label: 'Bug: NullPointerException (-3)' },// 44 - 3 = 41 (normal)
+          59: { penalty: 5, label: 'Bug Crítico: Kernel Panic (-5)' } // 59 - 5 = 54 (normal)
         };
 
-    // Casas de Desafio Python (alta densidade no modo Demo para avaliação rápida)
+    // Casas de Desafio Python (nenhuma coincide com destinos de atalhos ou bugs)
     const challenges = isDemo
-      ? [3, 6, 10, 12, 15, 18, 20]
-      : [4, 7, 10, 14, 17, 21, 25, 29, 32, 36, 40, 43, 47, 50, 54, 58, 62];
+      ? [3, 6, 11, 14, 19, 21, 24, 29, 30]
+      : [4, 7, 10, 14, 17, 21, 25, 29, 32, 36, 40, 43, 47, 50, 55, 58, 62];
 
     for (let i = 1; i <= total; i++) {
       let type = 'normal';

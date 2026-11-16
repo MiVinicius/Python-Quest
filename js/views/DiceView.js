@@ -54,6 +54,7 @@ export class DiceView {
     `;
 
     this.diceEl = document.getElementById('diceCube');
+    this.moduleEl = this.container.querySelector('.dice-module');
     this.energyContainerEl = document.getElementById('diceEnergyStatus');
     this.valueDisplayEl = document.getElementById('diceValueDisplay');
     this.bonusDetailEl = document.getElementById('diceBonusDetail');
@@ -110,6 +111,21 @@ export class DiceView {
         this.rollBtn.classList.add('btn-disabled');
       } else {
         this.rollBtn.classList.remove('btn-disabled');
+      }
+    }
+    if (this.moduleEl) {
+      this.moduleEl.classList.toggle('dice-waiting-roll', !disabled);
+      if (!disabled) {
+        this.moduleEl.classList.add('dice-player-turn');
+      }
+    }
+  }
+
+  setPlayerTurnHighlight(isPlayerTurn) {
+    if (this.moduleEl) {
+      this.moduleEl.classList.toggle('dice-player-turn', Boolean(isPlayerTurn));
+      if (!isPlayerTurn) {
+        this.moduleEl.classList.remove('dice-waiting-roll');
       }
     }
   }

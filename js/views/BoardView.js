@@ -224,7 +224,7 @@ export class BoardView {
   }
 
   /**
-   * Reconstrói as casas do tabuleiro quando alterna entre Modo Completo (64) e Demonstração (22).
+   * Reconstrói as casas do tabuleiro quando alterna entre Modo Completo (64) e Demonstração (32).
    */
   rebuildBoard() {
     this.populateGridTiles();

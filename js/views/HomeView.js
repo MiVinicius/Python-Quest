@@ -238,7 +238,7 @@ export class HomeView {
               <div class="menu-card-content">
                 <div class="menu-card-heading">
                   <h3 class="menu-card-title">Demonstração</h3>
-                  <span class="menu-card-badge badge-cyan">Avaliação Rápida • 22 Casas</span>
+                  <span class="menu-card-badge badge-cyan">Avaliação Rápida • 32 Casas</span>
                 </div>
                 <p class="menu-card-desc">Trilha curta contra o robô para testar todas as mecânicas em ~2 min.</p>
               </div>
@@ -441,7 +441,7 @@ export class HomeView {
           </div>
           <div class="home-modal-body" style="font-size: 0.9rem; line-height: 1.6; color: #cbd5e1;">
             <h4 style="color: #38bdf8; margin-bottom: 4px;">🏁 1. O Objetivo</h4>
-            <p>Seja o primeiro programador a alcançar ou ultrapassar a <strong>Casa 64</strong> (ou a <strong>Casa 22</strong> no Modo Demonstração) na trilha em zigue-zague.</p>
+            <p>Seja o primeiro programador a alcançar ou ultrapassar a <strong>Casa 64</strong> (ou a <strong>Casa 32</strong> no Modo Demonstração) na trilha em zigue-zague.</p>
             
             <h4 style="color: #ffd43b; margin-top: 14px; margin-bottom: 4px;">🎲 2. A Energia do Dado</h4>
             <p>No início do seu turno, role o dado D6 para gerar sua energia de movimento. O total obtido define exatamente quantos passos base seu algoritmo deve computar.</p>

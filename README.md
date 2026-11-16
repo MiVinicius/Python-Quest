@@ -10,7 +10,7 @@ O jogador avança pelo tabuleiro montando pequenos algoritmos (usando loops `for
 
 ## 🎮 Modos de Jogo
 
-- **Demonstração (22 casas vs Robô):** versão compacta para testar todas as mecânicas em poucos minutos.
+- **Demonstração (32 casas vs Robô):** versão compacta para testar todas as mecânicas em poucos minutos.
 - **Solo vs CPU (64 casas):** partida completa contra o bot com três níveis de dificuldade (*Iniciante*, *Equilibrada* e *Mestre*).
 - **Multiplayer Online (P2P):** partidas em tempo real via WebRTC (PeerJS) ou entre abas locais (`BroadcastChannel`), por **Partida Rápida** ou **Sala Privada (`PY-XXXX`)**.
 
@@ -30,7 +30,7 @@ O jogador avança pelo tabuleiro montando pequenos algoritmos (usando loops `for
    - **⚡ Atalho:** avança casas extras.
    - **🐛 Bug:** faz o peão recuar (anulado se você pular sobre a casa ou tiver um escudo ativo).
    - **❓ Desafio:** abre 3 cartas de dificuldade (**Comum +2**, **Rara +4**, **Épica +6**) com uma pergunta de Python e tempo limite de 25 segundos.
-5. **Vitória:** vence quem chegar primeiro à casa final (**64** no modo padrão ou **22** na demonstração).
+5. **Vitória:** vence quem chegar primeiro à casa final (**64** no modo padrão ou **32** na demonstração).
 
 ---
 
@@ -91,7 +91,7 @@ python-quest/
     │   └── AuthService.js         # Autenticação local (SHA-256) e exportação/importação JSON
     ├── models/
     │   ├── GameStateModel.js      # Estado da partida (turnos, posições, escudos e logs)
-    │   ├── BoardModel.js          # Geração do tabuleiro (64 casas / 22 na Demo)
+    │   ├── BoardModel.js          # Geração do tabuleiro (64 casas / 32 na Demo)
     │   ├── DiceModel.js           # Rolagem do dado e cálculo de bônus
     │   ├── BlockProgramModel.js   # Árvore de blocos (AST), avaliador e gerador de código Python
     │   ├── BotModel.js            # Lógica de decisão da CPU

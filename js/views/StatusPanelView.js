@@ -18,6 +18,7 @@ export class StatusPanelView {
     this.githubModal = null;
 
     this.onRestartCallback = null;
+    this.onReturnHomeCallback = null;
   }
 
   init() {
@@ -49,7 +50,8 @@ export class StatusPanelView {
           <h2 class="modal-title" id="gameOverTitle">Vitória!</h2>
           <p class="modal-subtitle" id="gameOverSubtitle">Você alcançou a casa 64 primeiro!</p>
           <div class="stats-summary" id="gameOverStats"></div>
-          <div class="modal-actions">
+          <div class="modal-actions" style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+            <button id="backHomeFromGameOverBtn" class="btn-ghost btn-lg">🏠 Voltar ao Menu Inicial</button>
             <button id="restartGameBtn" class="btn-primary btn-lg">Jogar Novamente 🔄</button>
           </div>
         </div>
@@ -63,6 +65,14 @@ export class StatusPanelView {
       restartBtn.addEventListener('click', () => {
         this.hideGameOver();
         if (this.onRestartCallback) this.onRestartCallback();
+      });
+    }
+
+    const backHomeBtn = document.getElementById('backHomeFromGameOverBtn');
+    if (backHomeBtn) {
+      backHomeBtn.addEventListener('click', () => {
+        this.hideGameOver();
+        if (this.onReturnHomeCallback) this.onReturnHomeCallback();
       });
     }
 
@@ -151,7 +161,7 @@ export class StatusPanelView {
     if (this.playerPosEl) this.playerPosEl.textContent = `${playerPos} / ${total}`;
     if (this.botPosEl) this.botPosEl.textContent = `${botPos} / ${total}`;
     if (this.trackerGoalLabelEl) {
-      this.trackerGoalLabelEl.textContent = total === 22
+      this.trackerGoalLabelEl.textContent = total < 64
         ? `Casa ${total} (Meta Demo) 🏆`
         : `Casa ${total} (Python Master) 🏆`;
     }
@@ -261,5 +271,9 @@ export class StatusPanelView {
 
   onRestart(cb) {
     this.onRestartCallback = cb;
+  }
+
+  onReturnHome(cb) {
+    this.onReturnHomeCallback = cb;
   }
 }

@@ -658,6 +658,28 @@ body {
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   padding: 14px 18px;
+  transition: border-color 0.25s ease, box-shadow 0.25s ease, background 0.25s ease;
+}
+
+.dice-module.dice-player-turn {
+  background: linear-gradient(135deg, rgba(18, 25, 38, 0.96), rgba(30, 58, 95, 0.45));
+  border: 2px solid var(--py-yellow);
+  box-shadow: 0 0 22px rgba(255, 212, 59, 0.28), inset 0 0 14px rgba(255, 212, 59, 0.08);
+}
+
+.dice-module.dice-waiting-roll {
+  animation: diceTurnGlow 1.6s infinite ease-in-out;
+}
+
+@keyframes diceTurnGlow {
+  0%, 100% {
+    border-color: var(--py-yellow);
+    box-shadow: 0 0 16px rgba(255, 212, 59, 0.25), 0 0 0 3px rgba(255, 212, 59, 0.12);
+  }
+  50% {
+    border-color: #fde047;
+    box-shadow: 0 0 28px rgba(255, 212, 59, 0.55), 0 0 0 6px rgba(255, 212, 59, 0.22);
+  }
 }
 
 .dice-scene {
@@ -1854,13 +1876,13 @@ body {
   font-size: 0.95rem;
 }
 
-/* Painel Flutuante das 4 Etapas do Tutorial */
+/* Painel Flutuante das 4 Etapas do Tutorial (Alterna de posição para nunca cobrir a área de interação) */
 .tutorial-guide-banner {
   position: fixed;
-  bottom: 18px;
-  right: 20px;
+  bottom: 62px;
+  left: 20px;
   z-index: 2100;
-  width: min(460px, calc(100vw - 40px));
+  width: min(440px, calc(100vw - 40px));
   background: linear-gradient(160deg, rgba(15, 23, 42, 0.97) 0%, rgba(12, 20, 36, 0.98) 100%);
   border: 2px solid #fbbf24;
   border-radius: 18px;
@@ -1869,6 +1891,39 @@ body {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  transition: top 0.28s ease, bottom 0.28s ease, left 0.28s ease, right 0.28s ease, transform 0.28s ease;
+}
+
+.tutorial-guide-banner.tut-pos-bottom-left {
+  top: auto;
+  right: auto;
+  bottom: 62px;
+  left: 20px;
+  transform: none;
+}
+
+.tutorial-guide-banner.tut-pos-top-left {
+  top: 112px;
+  right: auto;
+  bottom: auto;
+  left: 20px;
+  transform: none;
+}
+
+.tutorial-guide-banner.tut-pos-top-center {
+  top: 112px;
+  left: 50%;
+  right: auto;
+  bottom: auto;
+  transform: translateX(-50%);
+}
+
+.tutorial-guide-banner.tut-pos-bottom-center {
+  top: auto;
+  bottom: 24px;
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
 }
 
 .tutorial-guide-header {

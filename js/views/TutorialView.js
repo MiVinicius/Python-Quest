@@ -165,6 +165,52 @@ export class TutorialView {
     });
   }
 
+  /**
+   * Alterna a posição da janela do tutorial conforme a etapa e verifica
+   * geometricamente se há sobreposição com o elemento a interagir.
+   */
+  setBannerPosition(preferredClass, targetSelectors = []) {
+    if (!this.guideBannerEl) return;
+    const posClasses = [
+      'tut-pos-bottom-left',
+      'tut-pos-top-left',
+      'tut-pos-top-center',
+      'tut-pos-bottom-center'
+    ];
+    this.guideBannerEl.classList.remove(...posClasses);
+    this.guideBannerEl.classList.add(preferredClass);
+
+    requestAnimationFrame(() => {
+      if (!this.guideBannerEl || this.guideBannerEl.classList.contains('hidden')) return;
+      const targets = targetSelectors
+        .map(s => (typeof s === 'string' ? document.querySelector(s) : s))
+        .filter(Boolean);
+      if (!targets.length) return;
+
+      const overlapsAny = () => {
+        const bRect = this.guideBannerEl.getBoundingClientRect();
+        return targets.some(t => {
+          const r = t.getBoundingClientRect();
+          return !(
+            bRect.right < r.left - 8 ||
+            bRect.left > r.right + 8 ||
+            bRect.bottom < r.top - 8 ||
+            bRect.top > r.bottom + 8
+          );
+        });
+      };
+
+      if (overlapsAny()) {
+        for (const altClass of posClasses) {
+          if (altClass === preferredClass) continue;
+          this.guideBannerEl.classList.remove(...posClasses);
+          this.guideBannerEl.classList.add(altClass);
+          if (!overlapsAny()) break;
+        }
+      }
+    });
+  }
+
   updateDots(stepNumber) {
     const pill = document.getElementById('tutorialStepPill');
     if (pill) {
@@ -183,7 +229,9 @@ export class TutorialView {
   showStep1() {
     this.currentStep = 1;
     this.updateDots(1);
-    this.highlightElements(['#rollDiceBtn', '#diceContainer']);
+    const targets = ['#rollDiceBtn', '#diceContainer'];
+    this.highlightElements(targets);
+    this.setBannerPosition('tut-pos-bottom-left', targets);
 
     const titleEl = document.getElementById('tutorialGuideTitle');
     const textEl = document.getElementById('tutorialGuideText');
@@ -209,7 +257,9 @@ export class TutorialView {
   showStep2(targetSteps, currentSteps = 0) {
     this.currentStep = 2;
     this.updateDots(2);
-    this.highlightElements(['#paletteBlocks', '#workspaceDropzone']);
+    const targets = ['#paletteBlocks', '#workspaceDropzone'];
+    this.highlightElements(targets);
+    this.setBannerPosition('tut-pos-top-left', targets);
 
     const titleEl = document.getElementById('tutorialGuideTitle');
     const textEl = document.getElementById('tutorialGuideText');
@@ -236,7 +286,9 @@ export class TutorialView {
   showStep3(pythonCodeSample = '') {
     this.currentStep = 3;
     this.updateDots(3);
-    this.highlightElements(['.python-preview-section']);
+    const targets = ['.python-preview-section'];
+    this.highlightElements(targets);
+    this.setBannerPosition('tut-pos-bottom-left', targets);
 
     const titleEl = document.getElementById('tutorialGuideTitle');
     const textEl = document.getElementById('tutorialGuideText');
@@ -265,7 +317,9 @@ export class TutorialView {
   showStep4() {
     this.currentStep = 4;
     this.updateDots(4);
-    this.highlightElements(['#executeCodeBtn']);
+    const targets = ['#executeCodeBtn'];
+    this.highlightElements(targets);
+    this.setBannerPosition('tut-pos-top-left', targets);
 
     const titleEl = document.getElementById('tutorialGuideTitle');
     const textEl = document.getElementById('tutorialGuideText');
@@ -291,6 +345,7 @@ export class TutorialView {
     this.clearHighlights();
     this.currentStep = 5;
     this.updateDots(5);
+    this.setBannerPosition('tut-pos-bottom-center', []);
 
     const titleEl = document.getElementById('tutorialGuideTitle');
     const textEl = document.getElementById('tutorialGuideText');
