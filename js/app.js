@@ -3,28 +3,28 @@
  * Ponto de entrada da aplicação Python Quest.
  * Inicializa Models, Views, Controllers e dispara o loop principal.
  */
-import { GameStateModel } from './models/GameStateModel.js';
-import { BoardModel } from './models/BoardModel.js';
-import { DiceModel } from './models/DiceModel.js';
-import { BlockProgramModel } from './models/BlockProgramModel.js';
-import { BotModel } from './models/BotModel.js';
-import { ChallengeModel } from './models/ChallengeModel.js';
-import { UserProfileModel } from './models/UserProfileModel.js';
-import { OnlineMultiplayerModel } from './models/OnlineMultiplayerModel.js';
+import { GameStateModel } from './models/GameStateModel.js?v=0.4.1';
+import { BoardModel } from './models/BoardModel.js?v=0.4.1';
+import { DiceModel } from './models/DiceModel.js?v=0.4.1';
+import { BlockProgramModel } from './models/BlockProgramModel.js?v=0.4.1';
+import { BotModel } from './models/BotModel.js?v=0.4.1';
+import { ChallengeModel } from './models/ChallengeModel.js?v=0.4.1';
+import { UserProfileModel } from './models/UserProfileModel.js?v=0.4.1';
+import { OnlineMultiplayerModel } from './models/OnlineMultiplayerModel.js?v=0.4.1';
 
-import { BoardView } from './views/BoardView.js';
-import { DiceView } from './views/DiceView.js';
-import { BlockWorkspaceView } from './views/BlockWorkspaceView.js';
-import { ChallengeModalView } from './views/ChallengeModalView.js';
-import { ChallengeCardsView } from './views/ChallengeCardsView.js';
-import { StatusPanelView } from './views/StatusPanelView.js';
-import { SoundView } from './views/SoundView.js';
-import { HomeView } from './views/HomeView.js?v=0.4.0';
-import { TutorialView } from './views/TutorialView.js?v=0.4.0';
+import { BoardView } from './views/BoardView.js?v=0.4.1';
+import { DiceView } from './views/DiceView.js?v=0.4.1';
+import { BlockWorkspaceView } from './views/BlockWorkspaceView.js?v=0.4.1';
+import { ChallengeModalView } from './views/ChallengeModalView.js?v=0.4.1';
+import { ChallengeCardsView } from './views/ChallengeCardsView.js?v=0.4.1';
+import { StatusPanelView } from './views/StatusPanelView.js?v=0.4.1';
+import { SoundView } from './views/SoundView.js?v=0.4.1';
+import { HomeView } from './views/HomeView.js?v=0.4.1';
+import { TutorialView } from './views/TutorialView.js?v=0.4.1';
 
-import { CodingController } from './controllers/CodingController.js';
-import { ChallengeController } from './controllers/ChallengeController.js';
-import { GameController } from './controllers/GameController.js';
+import { CodingController } from './controllers/CodingController.js?v=0.4.1';
+import { ChallengeController } from './controllers/ChallengeController.js?v=0.4.1';
+import { GameController } from './controllers/GameController.js?v=0.4.1';
 
 document.addEventListener('DOMContentLoaded', () => {
   // 1. Instanciação dos Models
@@ -99,7 +99,7 @@ document.addEventListener('DOMContentLoaded', () => {
       homeView.showGameArena();
       gameController.startOnlineGame(
         event.room.code,
-        'host',
+        event.role || onlineModel.playerRole || 'host',
         event.room.host,
         event.room.guest
       );
@@ -158,9 +158,11 @@ document.addEventListener('DOMContentLoaded', () => {
       try {
         const result = await onlineModel.joinRoom(data.roomCode, userProfile.data);
         if (result.success) {
+          homeView.resetJoinButton();
           homeView.closeModal('modalMultiplayer');
           homeView.showGameArena();
-          gameController.startOnlineGame(data.roomCode, 'guest', result.room.host, result.room.guest);
+          const finalCode = (result.room && result.room.code) || data.roomCode;
+          gameController.startOnlineGame(finalCode, 'guest', result.room.host, result.room.guest);
         } else {
           alert(result.message || 'Código de sala inválido ou não encontrado.');
           homeView.resetJoinButton();

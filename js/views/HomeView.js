@@ -665,10 +665,16 @@ export class HomeView {
 
     // Continuar com sessão já autenticada ou como convidado
     document.getElementById('btnGateContinueSession')?.addEventListener('click', () => {
+      try { sessionStorage.removeItem('python_quest_tab_guest_mode'); } catch (_) {}
+      this.profileModel.load();
+      this.profileModel.initAccountSession();
       this.enterMainHub();
     });
 
     document.getElementById('btnGateGuest')?.addEventListener('click', () => {
+      if (this.profileModel.enterGuestMode) {
+        this.profileModel.enterGuestMode();
+      }
       this.enterMainHub();
     });
 
@@ -921,17 +927,19 @@ export class HomeView {
 
   updateAuthGateSessionBanner() {
     const data = this.profileModel.data;
+    const savedSession = this.profileModel.authService ? this.profileModel.authService.getCurrentUser() : null;
     const box = document.getElementById('gateActiveSessionBox');
     if (!box) return;
 
-    if (data.isLoggedIn && data.username) {
+    const activeUser = (data.isLoggedIn && data.username) ? data : savedSession;
+    if (activeUser && activeUser.username) {
       box.classList.remove('hidden');
       const avatarEl = document.getElementById('gateSessionAvatar');
       const nameEl = document.getElementById('gateSessionName');
       const userEl = document.getElementById('gateSessionUser');
-      if (avatarEl) avatarEl.textContent = data.avatar || '🐍';
-      if (nameEl) nameEl.textContent = data.nickname || data.username;
-      if (userEl) userEl.textContent = `Sessão salva (@${data.username})`;
+      if (avatarEl) avatarEl.textContent = activeUser.avatar || '🐍';
+      if (nameEl) nameEl.textContent = activeUser.nickname || activeUser.username;
+      if (userEl) userEl.textContent = `Sessão salva (@${activeUser.username})`;
     } else {
       box.classList.add('hidden');
     }

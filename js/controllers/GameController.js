@@ -360,6 +360,9 @@ export class GameController {
     const payload = event.payload || {};
 
     if (action === 'ROLL') {
+      this.gameState.botBoost = 0;
+      this.gameState.botStunned = false;
+      this.updateAllViews();
       this.sound.playDiceRoll();
       this.workspaceView.setSpectatorMode(true, {
         name: this.opponentName,
@@ -434,9 +437,15 @@ export class GameController {
       this.gameState.addLog('Multiplayer', `${this.opponentName} caiu em um Desafio e está respondendo...`, 'warning');
     } else if (action === 'CHALLENGE_RESULT') {
       let resultText;
-      if (payload.timeout) resultText = `⏰ ${this.opponentName} não respondeu a tempo e foi atordoado!`;
-      else if (payload.correct) resultText = `✅ ${this.opponentName} acertou e ganhou +${payload.bonus ?? 2} de boost!`;
-      else resultText = `❌ ${this.opponentName} errou${payload.penalty > 0 ? ` e recuou ${payload.penalty} casa(s)` : ''}.`;
+      if (payload.timeout) {
+        resultText = `⏰ ${this.opponentName} não respondeu a tempo e foi atordoado!`;
+        this.gameState.botStunned = true;
+      } else if (payload.correct) {
+        resultText = `✅ ${this.opponentName} acertou e ganhou +${payload.bonus ?? 2} de boost!`;
+        this.gameState.botBoost = payload.bonus ?? 2;
+      } else {
+        resultText = `❌ ${this.opponentName} errou${payload.penalty > 0 ? ` e recuou ${payload.penalty} casa(s)` : ''}.`;
+      }
 
       this.boardView.revealOpponentAnswer({
         selectedIndex: payload.selectedIndex,
@@ -449,8 +458,8 @@ export class GameController {
 
       if (typeof payload.newPos === 'number' && payload.newPos !== this.gameState.botPos) {
         this.gameState.botPos = payload.newPos;
-        this.updateAllViews();
       }
+      this.updateAllViews();
     } else if (action === 'TILE_EFFECT') {
       const oldPos = this.gameState.botPos;
       const targetPos = typeof payload.newPos === 'number' ? payload.newPos : oldPos;
@@ -473,9 +482,16 @@ export class GameController {
       if (typeof payload.finalPos === 'number' && payload.finalPos !== this.gameState.botPos) {
         this.gameState.botPos = payload.finalPos;
       }
+      if (payload.skippedByStun) {
+        this.gameState.botStunned = false;
+        this.gameState.addLog('Multiplayer', `${this.opponentName} perdeu a vez por atordoamento (Stun)!`, 'warning');
+      }
       this.gameState.roundCount = payload.round || this.gameState.roundCount;
       this.gameState.addLog('Multiplayer', `É a sua vez de jogar! Role o dado.`, 'success');
       this.startPlayerTurn();
+    } else if (action === 'REMATCH') {
+      this.statusView.hideGameOver();
+      this.restartGame(true);
     }
   }
 
@@ -579,12 +595,18 @@ export class GameController {
       this.updateAllViews();
 
       if (this.isOnline) {
-        if (this.onlineModel) {
-          this.onlineModel.sendTurnAction('END_TURN', { round: this.gameState.roundCount });
-        }
+        const nextRound = this.playerRole === 'guest' ? this.gameState.roundCount + 1 : this.gameState.roundCount;
+        this.gameState.roundCount = nextRound;
         this.gameState.currentTurn = 'bot';
         this.diceView.setDisabled(true);
         this.codingCtrl.lockCoding();
+        if (this.workspaceView) {
+          this.workspaceView.setSpectatorMode(true, {
+            name: this.opponentName,
+            avatar: this.opponentAvatar,
+            phase: 'thinking'
+          });
+        }
         this.boardView.showOpponentWindow({
           avatar: this.opponentAvatar,
           name: this.opponentName,
@@ -594,6 +616,15 @@ export class GameController {
         });
         this.updateAllViews();
         this.gameState.addLog('Multiplayer', `Aguardando a vez de ${this.opponentName}...`, 'info');
+        setTimeout(() => {
+          if (this.isOnline && this.onlineModel) {
+            this.onlineModel.sendTurnAction('END_TURN', {
+              round: nextRound,
+              finalPos: this.gameState.playerPos,
+              skippedByStun: true
+            });
+          }
+        }, 700);
       } else {
         setTimeout(() => this.startBotTurn(), 1200);
       }
@@ -870,9 +901,11 @@ export class GameController {
       if (entity === 'player') {
         if (this.isOnline) {
           // Em multiplayer online, avisa o oponente que o turno acabou e aguarda
+          const nextRound = this.playerRole === 'guest' ? this.gameState.roundCount + 1 : this.gameState.roundCount;
+          this.gameState.roundCount = nextRound;
           if (this.onlineModel) {
             this.onlineModel.sendTurnAction('END_TURN', {
-              round: this.gameState.roundCount,
+              round: nextRound,
               finalPos: this.gameState.playerPos
             });
           }
@@ -900,6 +933,7 @@ export class GameController {
           setTimeout(() => this.startBotTurn(), 800);
         }
       } else {
+        this.gameState.roundCount += 1;
         setTimeout(() => this.startPlayerTurn(), 800);
       }
     }
@@ -968,6 +1002,7 @@ export class GameController {
 
     if (this.gameState.botStunned) {
       this.gameState.botStunned = false;
+      this.gameState.roundCount += 1;
       this.gameState.addLog('CPU', `${this.opponentName} está se reiniciando do Stun e pulou esta rodada.`, 'info');
       this.updateAllViews();
       setTimeout(() => this.startPlayerTurn(), 1200);
@@ -1112,7 +1147,10 @@ export class GameController {
     }
   }
 
-  restartGame() {
+  restartGame(fromRemote = false) {
+    if (this.isOnline && !fromRemote && this.onlineModel) {
+      this.onlineModel.sendTurnAction('REMATCH', { timestamp: Date.now() });
+    }
     this.gameState.reset();
     this.blockModel.clear();
     this.workspaceView.updateUI();
@@ -1123,6 +1161,25 @@ export class GameController {
     this.gameState.addLog('Sistema', 'Corrida pronta na Casa 1.', 'info');
     if (!this.isOnline || this.playerRole === 'host') {
       this.startPlayerTurn();
+    } else {
+      this.gameState.currentTurn = 'bot';
+      this.diceView.setDisabled(true);
+      this.codingCtrl.lockCoding();
+      if (this.workspaceView) {
+        this.workspaceView.setSpectatorMode(true, {
+          name: this.opponentName,
+          avatar: this.opponentAvatar,
+          phase: 'thinking'
+        });
+      }
+      this.boardView.showOpponentWindow({
+        avatar: this.opponentAvatar,
+        name: this.opponentName,
+        sub: 'Multiplayer Online',
+        phase: '🧠 Aguardando...',
+        tickerText: `Nova partida iniciada! Aguardando a jogada inicial de ${this.opponentName}...`
+      });
+      this.updateAllViews();
     }
   }
 }

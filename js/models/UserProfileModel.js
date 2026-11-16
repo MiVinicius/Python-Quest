@@ -23,8 +23,33 @@ export class UserProfileModel {
     }
   }
 
+  isTabForcedGuest() {
+    try {
+      return sessionStorage.getItem('python_quest_tab_guest_mode') === '1';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  enterGuestMode() {
+    try {
+      sessionStorage.setItem('python_quest_tab_guest_mode', '1');
+    } catch (_) {}
+    const guestTag = this.getSessionGuestTag();
+    this.data = {
+      ...this.getDefaultProfile(),
+      username: null,
+      isLoggedIn: false,
+      nickname: `Convidado #${guestTag}`,
+      avatar: '🦊',
+      avatarName: 'Algo Fox'
+    };
+    this.notifyListeners();
+  }
+
   getDefaultProfile() {
-    const session = this.authService ? this.authService.getCurrentUser() : null;
+    const forcedGuest = this.isTabForcedGuest();
+    const session = (!forcedGuest && this.authService) ? this.authService.getCurrentUser() : null;
     const guestTag = this.getSessionGuestTag();
     return {
       username: session ? session.username : null,
@@ -65,6 +90,7 @@ export class UserProfileModel {
   }
 
   async initAccountSession() {
+    if (this.isTabForcedGuest()) return;
     if (this.authService && this.authService.isLoggedIn()) {
       try {
         const accountData = await this.authService.fetchCloudProfile();
@@ -89,6 +115,25 @@ export class UserProfileModel {
 
   load() {
     try {
+      if (this.isTabForcedGuest()) {
+        const tabGuestRaw = sessionStorage.getItem('python_quest_tab_guest_profile');
+        if (tabGuestRaw) {
+          const parsed = JSON.parse(tabGuestRaw);
+          const def = this.getDefaultProfile();
+          this.data = {
+            ...def,
+            ...parsed,
+            isLoggedIn: false,
+            username: null,
+            career: { ...def.career, ...(parsed.career || {}) },
+            achievements: this.mergeAchievements(parsed.achievements)
+          };
+          return;
+        }
+        this.data = this.getDefaultProfile();
+        return;
+      }
+
       const stored = localStorage.getItem(this.STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
@@ -112,6 +157,12 @@ export class UserProfileModel {
 
   save(syncToAccount = true) {
     try {
+      if (this.isTabForcedGuest()) {
+        sessionStorage.setItem('python_quest_tab_guest_profile', JSON.stringify(this.data));
+        this.notifyListeners();
+        return;
+      }
+
       localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.data));
       this.notifyListeners();
 
@@ -252,6 +303,7 @@ export class UserProfileModel {
   async login(username, password) {
     const res = await this.authService.login(username, password);
     if (res.success && res.user) {
+      try { sessionStorage.removeItem('python_quest_tab_guest_mode'); } catch (_) {}
       this.data = {
         ...this.getDefaultProfile(),
         ...res.user,
@@ -274,6 +326,7 @@ export class UserProfileModel {
     // Transfere o progresso atual de convidado para a nova conta criada
     const res = await this.authService.register(username, password, nickname, avatar, this.data);
     if (res.success && res.user) {
+      try { sessionStorage.removeItem('python_quest_tab_guest_mode'); } catch (_) {}
       this.data = {
         ...this.getDefaultProfile(),
         ...res.user,
