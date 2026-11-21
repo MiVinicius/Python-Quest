@@ -36,16 +36,26 @@ export class CodingController {
 
   handleExecute() {
     if (this.gameState.currentTurn !== 'player' || this.gameState.phase !== 'coding') {
-      this.gameState.addLog('Sistema', 'Aguarde a rolagem do dado para programar seu movimento.', 'warning');
+      const waitMsg = 'Role o dado primeiro para gerar sua energia de passos antes de executar.';
+      this.gameState.addLog('Sistema', waitMsg, 'warning');
+      if (typeof this.workspaceView.showValidationFeedback === 'function') {
+        this.workspaceView.showValidationFeedback(waitMsg, 'warning');
+      }
       return;
     }
 
     const diceTotal = this.gameState.lastDiceValue;
-    const validation = this.blockModel.validateAgainstDice(diceTotal);
+    const validation = this.blockModel.validateAgainstDice(diceTotal, {
+      jumpCharges: this.gameState.jumpCharges,
+      shieldCharges: this.gameState.shieldCharges
+    });
 
     if (validation.valid) {
       this.sound.playCompileSuccess();
       this.gameState.addLog('Compilador', `Status 200 OK: ${validation.message}`, 'success');
+      if (typeof this.workspaceView.showValidationFeedback === 'function') {
+        this.workspaceView.showValidationFeedback(validation.message, 'success');
+      }
       this.lockCoding();
       
       if (this.onValidExecutionCallback) {
@@ -54,6 +64,9 @@ export class CodingController {
     } else {
       this.sound.playCompileError();
       this.gameState.addLog('Compilador', `Erro de Lógica: ${validation.message}`, 'danger');
+      if (typeof this.workspaceView.showValidationFeedback === 'function') {
+        this.workspaceView.showValidationFeedback(validation.message, 'error');
+      }
     }
   }
 

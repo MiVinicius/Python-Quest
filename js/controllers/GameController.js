@@ -104,9 +104,17 @@ export class GameController {
     const openTutorialBtn = document.getElementById('openTutorialBtn');
     if (openTutorialBtn) {
       openTutorialBtn.addEventListener('click', () => {
-        if (!this.isOnline) {
-          this.startInteractiveTutorial();
+        if (this.isOnline) return;
+        const matchInProgress = (
+          this.gameState.roundCount > 1 ||
+          this.gameState.playerPos > 1 ||
+          this.gameState.botPos > 1 ||
+          this.gameState.phase !== 'waiting_roll'
+        );
+        if (matchInProgress && !confirm('Iniciar o tutorial reiniciará a partida atual para a Casa 1. Deseja continuar?')) {
+          return;
         }
+        this.startInteractiveTutorial();
       });
     }
 
@@ -166,10 +174,12 @@ export class GameController {
     // Exibe controles Solo e badge indicativo do Modo Demonstração
     const diffSelect = document.getElementById('difficultySelect');
     const restartBtn = document.getElementById('restartTopBtn');
+    const tutorialBtn = document.getElementById('openTutorialBtn');
     const roomBadge = document.getElementById('roomCodeBadge');
     const roomBadgeText = document.getElementById('roomCodeBadgeText');
     if (diffSelect) diffSelect.style.display = 'inline-block';
     if (restartBtn) restartBtn.style.display = 'inline-block';
+    if (tutorialBtn) tutorialBtn.style.display = 'inline-flex';
     if (roomBadge) roomBadge.style.display = 'inline-flex';
     if (roomBadgeText) roomBadgeText.textContent = '🎯 Modo Demonstração (32 Casas)';
 
@@ -198,9 +208,11 @@ export class GameController {
     // Restaura botões Solo (Dificuldade e Reiniciar) e esconde crachá de sala
     const diffSelect = document.getElementById('difficultySelect');
     const restartBtn = document.getElementById('restartTopBtn');
+    const tutorialBtn = document.getElementById('openTutorialBtn');
     const roomBadge = document.getElementById('roomCodeBadge');
     if (diffSelect) diffSelect.style.display = 'inline-block';
     if (restartBtn) restartBtn.style.display = 'inline-block';
+    if (tutorialBtn) tutorialBtn.style.display = 'inline-flex';
     if (roomBadge) roomBadge.style.display = 'none';
 
     this.syncPlayerIdentity();
@@ -289,10 +301,12 @@ export class GameController {
     // Oculta botões que não fazem sentido no modo multiplayer e exibe crachá da sala
     const diffSelect = document.getElementById('difficultySelect');
     const restartBtn = document.getElementById('restartTopBtn');
+    const tutorialBtn = document.getElementById('openTutorialBtn');
     const roomBadge = document.getElementById('roomCodeBadge');
     const roomBadgeText = document.getElementById('roomCodeBadgeText');
     if (diffSelect) diffSelect.style.display = 'none';
     if (restartBtn) restartBtn.style.display = 'none';
+    if (tutorialBtn) tutorialBtn.style.display = 'none';
     if (roomBadge) roomBadge.style.display = 'inline-flex';
     if (roomBadgeText) roomBadgeText.textContent = `Sala: ${roomCode}`;
 
@@ -530,9 +544,11 @@ export class GameController {
     // Restaura visualização padrão dos botões do cabeçalho
     const diffSelect = document.getElementById('difficultySelect');
     const restartBtn = document.getElementById('restartTopBtn');
+    const tutorialBtn = document.getElementById('openTutorialBtn');
     const roomBadge = document.getElementById('roomCodeBadge');
     if (diffSelect) diffSelect.style.display = 'inline-block';
     if (restartBtn) restartBtn.style.display = 'inline-block';
+    if (tutorialBtn) tutorialBtn.style.display = 'inline-flex';
     if (roomBadge) roomBadge.style.display = 'none';
 
     if (this.homeView) {
@@ -578,9 +594,13 @@ export class GameController {
 
     this.gameState.currentTurn = 'player';
     this.gameState.pythonUnlockedThisTurn = false;
+    this.gameState.pythonUnlockReason = null;
     if (this.workspaceView) {
       this.workspaceView.setTutorialFreePreview(false);
       this.workspaceView.setSpectatorMode(false);
+      if (typeof this.workspaceView.clearValidationFeedback === 'function') {
+        this.workspaceView.clearValidationFeedback();
+      }
     }
     this.boardView.hideOpponentWindow();
     this.updateAllViews();
@@ -631,6 +651,25 @@ export class GameController {
       return;
     }
 
+    // Assistência Adaptativa: desbloqueia tradução Python grátis se estiver atrás ou tiver passe pós-erro em Carta Comum
+    const assist = this.gameState.applyAutoPythonAssistance();
+    if (assist.unlocked) {
+      if (this.workspaceView) this.workspaceView.updatePythonLockState();
+      if (assist.reason === 'behind') {
+        this.gameState.addLog(
+          'Assistência',
+          '🎓 Você está atrás na corrida! Tradução em Python liberada gratuitamente neste turno.',
+          'success'
+        );
+      } else if (assist.reason === 'common_miss') {
+        this.gameState.addLog(
+          'Assistência',
+          '🎁 Bônus ativado (Carta Comum)! Tradução em Python liberada gratuitamente neste turno.',
+          'success'
+        );
+      }
+    }
+
     this.gameState.setPhase('waiting_roll');
     this.diceModel.setBonus(this.gameState.playerBoost);
     this.diceView.setBonus(this.gameState.playerBoost);
@@ -669,7 +708,7 @@ export class GameController {
     }
   }
 
-  async handlePlayerMove(steps, actions = []) {
+  async handlePlayerMove(plannedSteps, actions = []) {
     const wasTutorialStep4 = Boolean(this.tutorialView && this.tutorialView.isActive && this.tutorialView.currentStep >= 2);
     if (wasTutorialStep4) {
       this.tutorialView.clearHighlights();
@@ -678,79 +717,88 @@ export class GameController {
     this.gameState.setPhase('moving');
     this.diceView.hideEnergy();
 
-    // Processa modificadores e ações avançadas
-    const hasShield = actions && actions.some(a => a.actionKind === 'shield');
-    const hasJump = actions && actions.some(a => a.actionKind === 'jump');
-    const conditionalActions = actions ? actions.filter(a => a.actionKind === 'conditional') : [];
+    // Execução fiel ao Python real: blocos dentro de `if` só rodam se a condição for True
+    const execResult = this.blockModel.executeTree({
+      lastDiceRoll: this.gameState.lastDiceRoll || this.gameState.lastDiceValue,
+      lastDiceValue: this.gameState.lastDiceValue,
+      plannedSteps,
+      playerPos: this.gameState.playerPos,
+      botPos: this.gameState.botPos,
+      boardModel: this.boardModel
+    });
+
+    const hasShield = execResult.hasShield;
+    const hasJump = execResult.hasJump;
+    const steps = execResult.totalExecutedSteps;
+
+    // Consome cargas táticas apenas das habilidades efetivamente executadas neste turno
+    if (hasJump || hasShield) {
+      this.gameState.consumeTacticalCharges({
+        jumps: hasJump ? 1 : 0,
+        shields: hasShield ? 1 : 0
+      });
+    }
 
     if (hasShield) {
       this.gameState.playerShielded = true;
-      this.gameState.addLog('Você', '🛡️ Escudo de Proteção (try...except BugTrap) armado! O próximo bug será ignorado.', 'info');
+      this.gameState.addLog(
+        'Você',
+        `🛡️ Escudo de Proteção (try...except BugTrap) armado! O próximo bug será ignorado (Cargas restantes: ${this.gameState.shieldCharges}).`,
+        'info'
+      );
     }
 
-    if (conditionalActions.length > 0) {
-      const evaluatedConds = new Set();
-      const pureRoll = this.gameState.lastDiceRoll || this.gameState.lastDiceValue;
-      const baseSteps = steps;
-
-      for (const conditionalAction of conditionalActions) {
-        const cond = conditionalAction.condition;
-        if (evaluatedConds.has(cond)) continue;
-        evaluatedConds.add(cond);
-
-        let conditionMet = false;
-        let condDesc = '';
-        let condDetail = '';
-
-        if (cond === 'oponente_a_frente') {
-          conditionMet = (this.gameState.botPos > this.gameState.playerPos);
-          condDesc = 'oponente.a_frente';
-          condDetail = conditionMet 
-            ? `Oponente na casa ${this.gameState.botPos} está à frente de Você na casa ${this.gameState.playerPos}`
-            : `Oponente na casa ${this.gameState.botPos} NÃO está à frente de Você na casa ${this.gameState.playerPos}`;
-        } else if (cond === 'dado_par') {
-          conditionMet = (pureRoll % 2 === 0);
-          condDesc = 'dado % 2 == 0';
-          condDetail = conditionMet
-            ? `dado rolado foi ${pureRoll} (PAR: ${pureRoll} % 2 == 0 é True)`
-            : `dado rolado foi ${pureRoll} (ÍMPAR: ${pureRoll} % 2 == 1 != 0 é False)`;
-        } else if (cond === 'dado_impar') {
-          conditionMet = (pureRoll % 2 !== 0);
-          condDesc = 'dado % 2 != 0';
-          condDetail = conditionMet
-            ? `dado rolado foi ${pureRoll} (ÍMPAR: ${pureRoll} % 2 != 0 é True)`
-            : `dado rolado foi ${pureRoll} (PAR: ${pureRoll} % 2 == 0 é False)`;
-        } else if (cond === 'casa_com_bug') {
-          const targetTile = this.boardModel ? this.boardModel.getTile(this.gameState.playerPos + baseSteps) : null;
-          conditionMet = Boolean(targetTile && (targetTile.type === 'trap' || targetTile.type === 'bug'));
-          condDesc = 'proxima_casa.tem_bug()';
-          condDetail = conditionMet
-            ? `a casa de destino ${this.gameState.playerPos + baseSteps} contém um Bug!`
-            : `a casa de destino ${this.gameState.playerPos + baseSteps} é livre de bugs.`;
-        }
-
-        if (conditionMet) {
-          steps += 1;
+    if (execResult.conditionalResults.length > 0) {
+      let trueIfCount = 0;
+      for (const condRes of execResult.conditionalResults) {
+        if (condRes.met) {
+          trueIfCount += 1;
           this.sound.playCompileSuccess();
-          this.gameState.addLog('Você', `🔀 Condicional [if ${condDesc}] VERDADEIRA! (${condDetail}). Bônus de +1 PASSO contabilizado com sucesso! Total a mover: ${steps} casas. 🧠`, 'success');
+          const bonusMsg = trueIfCount === 1
+            ? 'Bônus tático de +1 PASSO contabilizado! 🧠'
+            : 'Corpo interno executado (limite tático de +1 passo bônus por turno já aplicado).';
+          this.gameState.addLog(
+            'Você',
+            `🔀 Condicional [if ${condRes.desc}] VERDADEIRA! (${condRes.detail}). ${bonusMsg}`,
+            'success'
+          );
         } else {
-          this.gameState.addLog('Você', `🔀 Condicional [if ${condDesc}] FALSA: ${condDetail}. Nenhum passo bônus foi concedido desta vez.`, 'warning');
+          const skipMsg = condRes.childCount > 0
+            ? `Os ${condRes.childCount} bloco(s) internos foram ignorados (comportamento fiel ao Python) e nenhum bônus foi concedido.`
+            : 'Nenhum passo bônus foi concedido desta vez.';
+          this.gameState.addLog(
+            'Você',
+            `🔀 Condicional [if ${condRes.desc}] FALSA (${condRes.detail}). ${skipMsg}`,
+            'warning'
+          );
         }
       }
     }
 
     if (hasJump) {
-      this.gameState.addLog('Você', `🦘 Pulo acrobático de ${steps} casas executado com sucesso!`, 'info');
+      this.gameState.addLog(
+        'Você',
+        `🦘 Pulo acrobático de ${steps} casas executado (Cargas restantes: ${this.gameState.jumpCharges})!`,
+        'info'
+      );
     }
 
     const oldPos = this.gameState.playerPos;
-    const newPos = this.gameState.advancePlayer(steps);
+    const newPos = steps > 0 ? this.gameState.advancePlayer(steps) : oldPos;
 
-    if (this.userProfile) {
+    if (steps > 0 && this.userProfile) {
       this.userProfile.addTilesTraveled(newPos - oldPos);
     }
 
-    this.gameState.addLog('Você', `Executando ${steps} passo(s) programados no tabuleiro...`, 'info');
+    if (steps === 0 && execResult.skippedAnyByFalseIf) {
+      const msg = '🔀 Como o bloco if avaliou como False, os comandos dentro dele não foram executados e seu peão não avançou!';
+      this.gameState.addLog('Python', msg, 'warning');
+      if (this.workspaceView && typeof this.workspaceView.showValidationFeedback === 'function') {
+        this.workspaceView.showValidationFeedback(msg, 'warning');
+      }
+    } else {
+      this.gameState.addLog('Você', `Executando ${steps} passo(s) programados no tabuleiro...`, 'info');
+    }
 
     // Notifica o oponente online com dados completos da jogada
     if (this.isOnline && this.onlineModel) {
@@ -766,10 +814,12 @@ export class GameController {
       });
     }
 
-    await this.boardView.animateStepByStep('player', oldPos, newPos, (curr) => {
-      this.sound.playStep();
-      this.statusView.updateProgress(curr, this.gameState.botPos, this.gameState.TOTAL_TILES);
-    });
+    if (steps > 0) {
+      await this.boardView.animateStepByStep('player', oldPos, newPos, (curr) => {
+        this.sound.playStep();
+        this.statusView.updateProgress(curr, this.gameState.botPos, this.gameState.TOTAL_TILES);
+      });
+    }
 
     // Limpa workspace após compilar e mover
     this.blockModel.clear();
@@ -781,22 +831,24 @@ export class GameController {
       this.gameState.addLog('Tutorial', '🎉 Tutorial concluído com sucesso! Continue jogando normalmente.', 'success');
     }
 
-    await this.handleTileLanding('player', newPos, { jumped: hasJump });
+    await this.handleTileLanding('player', newPos, { jumped: hasJump, skippedMove: steps === 0 });
   }
 
   async handleTileLanding(entity, tileNumber, options = {}) {
     const tile = this.boardModel.getTile(tileNumber);
     if (!tile) return;
     const jumped = Boolean(options.jumped);
+    const skippedMove = Boolean(options.skippedMove);
 
-    // Vitória
-    if (tileNumber >= this.gameState.TOTAL_TILES) {
-      this.handleGameOver(entity);
-      return;
-    }
+    if (!skippedMove) {
+      // Vitória
+      if (tileNumber >= this.gameState.TOTAL_TILES) {
+        this.handleGameOver(entity);
+        return;
+      }
 
-    // Atalhos
-    if (tile.type === 'shortcut' && tile.effect) {
+      // Atalhos
+      if (tile.type === 'shortcut' && tile.effect) {
       const extraSteps = tile.effect.steps;
       this.boardView.triggerTileEffect(tileNumber, 'shortcut');
       this.sound.playCompileSuccess();
@@ -885,13 +937,14 @@ export class GameController {
       }
     }
 
-    // Desafios de Código Táticos com Cards
-    else if (tile.type === 'challenge') {
-      this.boardView.triggerTileEffect(tileNumber, 'challenge');
-      if (entity === 'player') {
-        await this.challengeCtrl.triggerChallenge('player');
-      } else if (!this.isOnline) {
-        await this.runBotChallenge();
+      // Desafios de Código Táticos com Cards
+      else if (tile.type === 'challenge') {
+        this.boardView.triggerTileEffect(tileNumber, 'challenge');
+        if (entity === 'player') {
+          await this.challengeCtrl.triggerChallenge('player');
+        } else if (!this.isOnline) {
+          await this.runBotChallenge();
+        }
       }
     }
 

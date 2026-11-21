@@ -148,6 +148,90 @@ export class BlockProgramModel {
   }
 
   /**
+   * Encontra o bloco container pai (for/if) de um bloco, ou null se estiver na raiz.
+   */
+  findParentBlock(id, list = this.rootBlocks, parent = null) {
+    for (const b of list) {
+      if (b.id === id) return parent;
+      if (b.children && b.children.length > 0) {
+        const found = this.findParentBlock(id, b.children, b);
+        if (found !== undefined) return found;
+      }
+    }
+    return parent === null ? null : undefined;
+  }
+
+  /**
+   * Verifica se targetId é igual a ancestorId ou descendente dele (evita ciclos).
+   */
+  isDescendant(ancestorId, targetId) {
+    if (!ancestorId || !targetId) return false;
+    if (ancestorId === targetId) return true;
+    const ancestor = this.findBlock(ancestorId);
+    if (!ancestor || !ancestor.children || ancestor.children.length === 0) return false;
+    return Boolean(this.findBlock(targetId, ancestor.children));
+  }
+
+  /**
+   * Move um bloco existente para a raiz (targetParentId = null) ou para dentro de um
+   * bloco container (for/if), em uma posição específica (targetIndex = -1 para o final).
+   */
+  moveBlockTo(blockId, targetParentId = null, targetIndex = -1) {
+    if (!blockId) return false;
+    if (targetParentId && this.isDescendant(blockId, targetParentId)) {
+      return false;
+    }
+
+    const sourceList = this.findParentList(blockId);
+    if (!sourceList) return false;
+    const sourceIdx = sourceList.findIndex(b => b.id === blockId);
+    if (sourceIdx === -1) return false;
+
+    let targetList = this.rootBlocks;
+    if (targetParentId) {
+      const targetParent = this.findBlock(targetParentId);
+      if (!targetParent || (targetParent.type !== 'loop_for' && targetParent.type !== 'conditional_if')) {
+        return false;
+      }
+      if (!Array.isArray(targetParent.children)) targetParent.children = [];
+      targetList = targetParent.children;
+    }
+
+    let adjustedIndex = targetIndex;
+    if (sourceList === targetList && adjustedIndex >= 0) {
+      if (adjustedIndex === sourceIdx || adjustedIndex === sourceIdx + 1) {
+        return false;
+      }
+      if (adjustedIndex > sourceIdx) {
+        adjustedIndex -= 1;
+      }
+    }
+
+    const [moved] = sourceList.splice(sourceIdx, 1);
+    if (adjustedIndex >= 0 && adjustedIndex <= targetList.length) {
+      targetList.splice(adjustedIndex, 0, moved);
+    } else {
+      targetList.push(moved);
+    }
+    return true;
+  }
+
+  /**
+   * Extrai um bloco aninhado um nível acima, posicionando-o logo após seu container pai.
+   */
+  unnestBlock(blockId) {
+    const parentBlock = this.findParentBlock(blockId);
+    if (!parentBlock) return false;
+
+    const grandParentBlock = this.findParentBlock(parentBlock.id);
+    const grandParentList = grandParentBlock ? grandParentBlock.children : this.rootBlocks;
+    const parentIdx = grandParentList.findIndex(b => b.id === parentBlock.id);
+    const insertIdx = parentIdx !== -1 ? parentIdx + 1 : -1;
+
+    return this.moveBlockTo(blockId, grandParentBlock ? grandParentBlock.id : null, insertIdx);
+  }
+
+  /**
    * Avalia recursivamente a árvore e retorna o total de passos,
    * a lista de ações ativas e a representação matemática.
    */
@@ -265,6 +349,130 @@ export class BlockProgramModel {
   }
 
   /**
+   * Avalia uma condição booleana de um bloco `if` no contexto real da partida.
+   */
+  evaluateCondition(condition, context = {}) {
+    const pureRoll = context.lastDiceRoll || context.lastDiceValue || 0;
+    const playerPos = context.playerPos ?? 1;
+    const botPos = context.botPos ?? 1;
+    const plannedSteps = context.plannedSteps ?? 0;
+    const boardModel = context.boardModel || null;
+
+    if (condition === 'oponente_a_frente') {
+      const met = botPos > playerPos;
+      return {
+        met,
+        desc: 'oponente.a_frente',
+        detail: met
+          ? `Oponente na casa ${botPos} está à frente de Você na casa ${playerPos}`
+          : `Oponente na casa ${botPos} NÃO está à frente de Você na casa ${playerPos}`
+      };
+    }
+
+    if (condition === 'dado_par') {
+      const met = pureRoll > 0 && pureRoll % 2 === 0;
+      return {
+        met,
+        desc: 'dado % 2 == 0',
+        detail: met
+          ? `dado rolado foi ${pureRoll} (PAR: ${pureRoll} % 2 == 0 é True)`
+          : `dado rolado foi ${pureRoll} (ÍMPAR: ${pureRoll} % 2 == 1 != 0 é False)`
+      };
+    }
+
+    if (condition === 'dado_impar') {
+      const met = pureRoll > 0 && pureRoll % 2 !== 0;
+      return {
+        met,
+        desc: 'dado % 2 != 0',
+        detail: met
+          ? `dado rolado foi ${pureRoll} (ÍMPAR: ${pureRoll} % 2 != 0 é True)`
+          : `dado rolado foi ${pureRoll} (PAR: ${pureRoll} % 2 == 0 é False)`
+      };
+    }
+
+    if (condition === 'casa_com_bug') {
+      const maxTile = boardModel ? boardModel.TOTAL_TILES : 64;
+      const targetPos = Math.min(maxTile, playerPos + plannedSteps);
+      const targetTile = boardModel ? boardModel.getTile(targetPos) : null;
+      const met = Boolean(targetTile && (targetTile.type === 'trap' || targetTile.type === 'bug'));
+      return {
+        met,
+        desc: 'proxima_casa.tem_bug()',
+        detail: met
+          ? `a casa de destino ${targetPos} contém um Bug!`
+          : `a casa de destino ${targetPos} é livre de bugs.`
+      };
+    }
+
+    return { met: false, desc: String(condition || 'condicao'), detail: 'Condição desconhecida.' };
+  }
+
+  /**
+   * Executa a árvore de blocos com semântica fiel ao Python real:
+   * - Em `if condicao:`, os blocos internos SÓ são executados se a condição for True.
+   * - Se a condição for False, o corpo inteiro do `if` é ignorado.
+   * - Bônus tático de `if` verdadeiro é limitado a no máximo +1 passo extra por turno.
+   */
+  executeTree(context = {}) {
+    const state = {
+      executedSteps: 0,
+      hasJump: false,
+      hasShield: false,
+      hasTrueIf: false,
+      skippedAnyByFalseIf: false,
+      conditionalResults: []
+    };
+
+    const execList = (blocks) => {
+      for (const node of blocks) {
+        if (node.type === 'action_forward') {
+          state.executedSteps += node.value || 1;
+        } else if (node.type === 'action_jump') {
+          state.executedSteps += node.value || 1;
+          state.hasJump = true;
+        } else if (node.type === 'action_shield') {
+          state.hasShield = true;
+        } else if (node.type === 'loop_for') {
+          const times = node.value || 1;
+          for (let i = 0; i < times; i++) {
+            execList(node.children || []);
+          }
+        } else if (node.type === 'conditional_if') {
+          const condRes = this.evaluateCondition(node.condition, context);
+          const childCount = (node.children || []).length;
+          state.conditionalResults.push({
+            condition: node.condition,
+            met: condRes.met,
+            desc: condRes.desc,
+            detail: condRes.detail,
+            childCount
+          });
+          if (condRes.met) {
+            state.hasTrueIf = true;
+            execList(node.children || []);
+          } else if (childCount > 0) {
+            state.skippedAnyByFalseIf = true;
+          }
+        }
+      }
+    };
+
+    execList(this.rootBlocks);
+
+    const bonusSteps = state.hasTrueIf ? 1 : 0;
+    return {
+      executedSteps: state.executedSteps,
+      bonusSteps,
+      totalExecutedSteps: state.executedSteps + bonusSteps,
+      hasJump: state.hasJump,
+      hasShield: state.hasShield,
+      skippedAnyByFalseIf: state.skippedAnyByFalseIf,
+      conditionalResults: state.conditionalResults
+    };
+  }
+
+  /**
    * Converte a árvore de blocos para código Python idiomático com indentação PEP 8.
    */
   toPythonCode() {
@@ -318,9 +526,9 @@ export class BlockProgramModel {
   }
 
   /**
-   * Valida a árvore montada contra a energia do dado.
+   * Valida a árvore montada contra a energia do dado e cargas táticas disponíveis.
    */
-  validateAgainstDice(diceTotal) {
+  validateAgainstDice(diceTotal, tacticalLimits = null) {
     if (this.rootBlocks.length === 0) {
       return {
         valid: false,
@@ -332,8 +540,31 @@ export class BlockProgramModel {
 
     const { totalSteps, actions, formula } = this.evaluateTree();
     const hasMovement = actions.some(a => a.actionKind !== 'shield');
+    const usesJump = actions.some(a => a.actionKind === 'jump');
+    const usesShield = actions.some(a => a.actionKind === 'shield');
 
-    if (!hasMovement && actions.some(a => a.actionKind === 'shield')) {
+    if (tacticalLimits) {
+      if (usesJump && (tacticalLimits.jumpCharges ?? 0) <= 0) {
+        return {
+          valid: false,
+          steps: totalSteps,
+          actions,
+          formula,
+          message: 'Sem cargas de Pular (🦘)! Remova o bloco Pular ou acerte um Desafio Python para recarregar.'
+        };
+      }
+      if (usesShield && (tacticalLimits.shieldCharges ?? 0) <= 0) {
+        return {
+          valid: false,
+          steps: totalSteps,
+          actions,
+          formula,
+          message: 'Sem cargas de Escudo (🛡️)! Remova o bloco Escudo ou acerte um Desafio Python para recarregar.'
+        };
+      }
+    }
+
+    if (!hasMovement && usesShield) {
       return {
         valid: false,
         steps: 0,
@@ -356,7 +587,7 @@ export class BlockProgramModel {
         steps: totalSteps,
         actions,
         formula,
-        message: `Energia excedida: seu algoritmo gera ${totalSteps} passos (${formula}), mas o dado requer exatamente ${diceTotal} passos!`
+        message: `Energia excedida: seu algoritmo gera ${totalSteps} passos (${formula}), mas o dado requer exatamente ${diceTotal} passos (remova ${totalSteps - diceTotal})!`
       };
     } else {
       return {

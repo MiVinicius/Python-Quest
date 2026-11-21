@@ -27,6 +27,12 @@ export class ChallengeController {
       this.handleTimeout();
     });
 
+    if (typeof this.view.onExtendTime === 'function') {
+      this.view.onExtendTime(() => {
+        this.handleExtendTime();
+      });
+    }
+
     if (this.cardsView) {
       this.cardsView.onCardChosen((cardData) => {
         this.startChallengeWithCard(cardData);
@@ -106,7 +112,10 @@ export class ChallengeController {
       this.model.usedIds.add(cardData.question.id);
     }
 
-    this.view.show(cardData.question, 25);
+    this.view.show(cardData.question, 25, {
+      coins: this.gameState.playerCoins,
+      extendCost: this.gameState.TIME_EXTEND_COST || 10
+    });
 
     if (this.onChallengeEvent) {
       this.onChallengeEvent('start', {
@@ -127,8 +136,37 @@ export class ChallengeController {
     });
   }
 
+  handleExtendTime() {
+    const cost = this.gameState.TIME_EXTEND_COST || 10;
+    const res = this.gameState.spendCoins(cost);
+
+    if (res.success) {
+      this.sound.playCompileSuccess();
+      const wsCoins = document.getElementById('workspaceCoinsBadge');
+      const plCoins = document.getElementById('playerCoinsBadge');
+      const coinText = `🪙 ${res.remainingCoins} ${res.remainingCoins === 1 ? 'moeda' : 'moedas'}`;
+      if (wsCoins) wsCoins.textContent = coinText;
+      if (plCoins) plCoins.textContent = coinText;
+
+      this.view.addTime(15);
+      this.gameState.addLog(
+        'Desafio',
+        `⏱️ +15s adicionados ao cronômetro (-${res.cost} 🪙). Saldo restante: 🪙 ${res.remainingCoins} moedas.`,
+        'success'
+      );
+    } else {
+      this.sound.playCompileError();
+      this.gameState.addLog(
+        'Desafio',
+        `🔒 Moedas insuficientes para +15s (necessário 🪙 ${cost} moedas).`,
+        'warning'
+      );
+    }
+  }
+
   handleAnswer(selectedIndex) {
     const result = this.model.checkAnswer(selectedIndex);
+    result.selectedIndex = parseInt(selectedIndex, 10);
 
     const bonus = this.activeCardData ? this.activeCardData.bonus : 2;
     const baseCoins = this.activeCardData ? (this.activeCardData.coins || 10) : 10;
@@ -142,12 +180,16 @@ export class ChallengeController {
       const streakBonus = this.gameState.challengeStreak >= 2 ? 5 : 0;
       const totalCoinsEarned = baseCoins + streakBonus;
       const newBalance = this.gameState.addCoins(totalCoinsEarned);
+      const recharged = this.gameState.rechargeTacticalCharges(1);
       result.coinsEarned = totalCoinsEarned;
 
       const streakText = streakBonus > 0 ? ` (+${streakBonus} 🪙 bônus de sequência!)` : '';
+      const rechargeText = (recharged.jumpGained > 0 || recharged.shieldGained > 0)
+        ? ` • Cargas recarregadas (🦘×${recharged.jumpCharges} / 🛡️×${recharged.shieldCharges})`
+        : '';
       this.gameState.addLog(
         'Você',
-        `Acertou o desafio da Carta [${tierName}]! Ganhou +${bonus} de bônus no dado e +${totalCoinsEarned} moedas${streakText} (Saldo: 🪙 ${newBalance})! 🚀`,
+        `Acertou o desafio da Carta [${tierName}]! Ganhou +${bonus} de bônus no dado e +${totalCoinsEarned} moedas${streakText} (Saldo: 🪙 ${newBalance})${rechargeText}! 🚀`,
         'success'
       );
 
@@ -156,6 +198,11 @@ export class ChallengeController {
       const coinText = `🪙 ${newBalance} ${newBalance === 1 ? 'moeda' : 'moedas'}`;
       if (wsCoins) wsCoins.textContent = coinText;
       if (plCoins) plCoins.textContent = coinText;
+
+      const jumpBadge = document.getElementById('jumpChargesBadge');
+      const shieldBadge = document.getElementById('shieldChargesBadge');
+      if (jumpBadge) jumpBadge.textContent = `×${recharged.jumpCharges}`;
+      if (shieldBadge) shieldBadge.textContent = `×${recharged.shieldCharges}`;
       
       if (this.profileModel) {
         this.profileModel.recordChallenge(true);
@@ -167,7 +214,13 @@ export class ChallengeController {
         this.gameState.advancePlayer(-penalty);
         this.gameState.addLog('Você', `Errou a Carta [${tierName}]! Sofreu penalidade de recuo de ${penalty} casa(s). ⚠️`, 'danger');
       } else {
-        this.gameState.addLog('Você', `Errou a Carta [${tierName}], mas como era carta Comum, não sofreu penalidade! 🛡️`, 'info');
+        const totalPasses = this.gameState.grantFreePythonUnlock(1);
+        result.freePythonUnlockGranted = true;
+        this.gameState.addLog(
+          'Você',
+          `Errou a Carta [${tierName}], sem penalidade de recuo — e ganhou 🎁 1 Tradução Python Grátis para o próximo turno! (${totalPasses} disponível) 🛡️`,
+          'info'
+        );
       }
 
       if (this.profileModel) {
@@ -199,11 +252,15 @@ export class ChallengeController {
   }
 
   handleTimeout() {
+    const realExplanation = this.model.currentChallenge && this.model.currentChallenge.explicacao
+      ? ` Explicação: ${this.model.currentChallenge.explicacao}`
+      : '';
     const feedback = {
       correct: false,
       timeout: true,
+      selectedIndex: null,
       correctIndex: this.model.currentChallenge ? this.model.currentChallenge.resposta_correta : 0,
-      explanation: 'O tempo de 25 segundos esgotou antes da resposta ser enviada.',
+      explanation: `O tempo de 25 segundos esgotou antes da resposta ser enviada.${realExplanation}`,
       author: this.model.currentChallenge ? this.model.currentChallenge.autor : ''
     };
 

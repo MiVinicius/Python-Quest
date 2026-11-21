@@ -59,10 +59,10 @@
     "categoria": "Funções",
     "dificuldade": "medio",
     "pergunta": "Qual o resultado da chamada da função?",
-    "codigo": "def somar(x, y=2):\n    return x * y\n\nprint(somar(4))",
+    "codigo": "def multiplicar(x, y=2):\n    return x * y\n\nprint(multiplicar(4))",
     "opcoes": ["6", "8", "16", "TypeError"],
     "resposta_correta": 1,
-    "explicacao": "O parâmetro 'y' possui valor padrão 2. Logo, somar(4) calcula 4 * 2 = 8.",
+    "explicacao": "O parâmetro 'y' possui valor padrão 2. Logo, multiplicar(4) calcula 4 * 2 = 8.",
     "autor": "Comunidade Python Quest"
   },
   {
@@ -113,7 +113,7 @@
     "id": "py-011",
     "categoria": "Controle de Fluxo",
     "dificuldade": "facil",
-    "pergunta": "Qual número interromperá o loop com break?",
+    "pergunta": "Qual será o valor impresso para 'total' após o break?",
     "codigo": "total = 0\nfor x in [2, 4, 6, 7, 8]:\n    if x % 2 != 0:\n        break\n    total += x\nprint(total)",
     "opcoes": ["12", "19", "27", "6"],
     "resposta_correta": 0,
@@ -157,9 +157,9 @@
     "id": "py-015",
     "categoria": "Métodos de Strings",
     "dificuldade": "facil",
-    "pergunta": "Qual será o resultado de .strip()?",
+    "pergunta": "Qual será a saída após aplicar .strip() e .title()?",
     "codigo": "texto = '   python quest   '\nprint(texto.strip().title())",
-    "opcoes": ["'python quest'", "'Python Quest'", "'   Python Quest   '", "'PYTHON QUEST'"],
+    "opcoes": ["python quest", "Python Quest", "   Python Quest   ", "PYTHON QUEST"],
     "resposta_correta": 1,
     "explicacao": "strip() remove os espaços em branco nas extremidades e title() capitaliza a primeira letra de cada palavra.",
     "autor": "Comunidade Python Quest"
@@ -252,7 +252,7 @@
     "dificuldade": "facil",
     "pergunta": "Qual elemento da lista será impresso?",
     "codigo": "linguagens = ['C', 'Java', 'Python', 'Rust']\nprint(linguagens[-1])",
-    "opcoes": ["'C'", "'Python'", "'Rust'", "IndexError"],
+    "opcoes": ["C", "Python", "Rust", "IndexError"],
     "resposta_correta": 2,
     "explicacao": "Em Python, o índice -1 acessa diretamente o último elemento de uma sequência, -2 o penúltimo e assim por diante.",
     "autor": "Comunidade Python Quest"
@@ -299,7 +299,7 @@
     "id": "py-027",
     "categoria": "Função zip()",
     "dificuldade": "medio",
-    "pergunta": "Quantos elementos terá a lista gerada por zip()?",
+    "pergunta": "Qual será a lista gerada por zip()?",
     "codigo": "nomes = ['Ana', 'Beto', 'Caio']\nnotas = [10, 8]\nprint(list(zip(nomes, notas)))",
     "opcoes": [
       "[('Ana', 10), ('Beto', 8)]",
@@ -398,10 +398,10 @@
     "pergunta": "Qual é a saída do fatiamento com passo negativo?",
     "codigo": "texto = 'PYTHON'\nprint(texto[4:1:-1])",
     "opcoes": [
-      "'OHT'",
-      "'NOHT'",
-      "'HTY'",
-      "'OHTY'"
+      "OHT",
+      "NOHT",
+      "HTY",
+      "OHTY"
     ],
     "resposta_correta": 0,
     "explicacao": "Com passo -1, o fatiamento percorre para trás começando no índice 4 ('O'), passando pelo 3 ('H') e 2 ('T'), e parando antes do índice final 1.",
@@ -507,7 +507,7 @@
     "id": "py-040",
     "categoria": "Orientação a Objetos e Métodos Mágicos",
     "dificuldade": "dificil",
-    "pergunta": "Qual método especial permite usar len() em um objeto customizado?",
+    "pergunta": "Qual será a saída ao chamar len() no objeto customizado abaixo?",
     "codigo": "class Baralho:\n    def __init__(self, cartas):\n        self.cartas = cartas\n    def __len__(self):\n        return len(self.cartas)\n\nprint(len(Baralho(['A', 'K', 'Q'])))",
     "opcoes": [
       "TypeError",
@@ -575,8 +575,8 @@
     "codigo": "resultado = '' or 0 or 'Python' or 'Quest'\nprint(resultado)",
     "opcoes": [
       "True",
-      "'Quest'",
-      "'Python'",
+      "Quest",
+      "Python",
       "0"
     ],
     "resposta_correta": 2,

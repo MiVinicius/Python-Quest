@@ -7,6 +7,10 @@ export class GameStateModel {
     this.TOTAL_TILES = 64;
     this.INITIAL_COINS = 10;
     this.PYTHON_UNLOCK_COST = 10;
+    this.TIME_EXTEND_COST = 10;
+    this.INITIAL_JUMP_CHARGES = 2;
+    this.INITIAL_SHIELD_CHARGES = 2;
+    this.MAX_TACTICAL_CHARGES = 3;
     this.logListeners = [];
     this.reset();
   }
@@ -21,9 +25,13 @@ export class GameStateModel {
     this.currentTurn = 'player'; // 'player' | 'bot'
     this.phase = 'waiting_roll'; // 'waiting_roll' | 'coding' | 'moving' | 'challenge' | 'game_over'
     
-    // Economia da Partida (Moedas e Desbloqueio por Turno)
+    // Economia da Partida (Moedas, Desbloqueio Adaptativo, Tempo Extra e Cargas Táticas)
     this.playerCoins = this.INITIAL_COINS;
     this.pythonUnlockedThisTurn = false;
+    this.pythonUnlockReason = null; // null | 'coins' | 'behind' | 'common_miss'
+    this.freePythonUnlocks = 0;
+    this.jumpCharges = this.INITIAL_JUMP_CHARGES;
+    this.shieldCharges = this.INITIAL_SHIELD_CHARGES;
     this.challengeStreak = 0;
 
     // Bônus e status
@@ -47,21 +55,87 @@ export class GameStateModel {
     return this.playerCoins;
   }
 
-  unlockPythonForTurn() {
-    if (this.pythonUnlockedThisTurn) {
-      return { success: true, alreadyUnlocked: true, remainingCoins: this.playerCoins };
-    }
-    if (this.playerCoins < this.PYTHON_UNLOCK_COST) {
+  spendCoins(amount) {
+    const cost = Math.max(0, parseInt(amount, 10) || 0);
+    if (this.playerCoins < cost) {
       return {
         success: false,
-        needed: this.PYTHON_UNLOCK_COST - this.playerCoins,
-        cost: this.PYTHON_UNLOCK_COST
+        needed: cost - this.playerCoins,
+        cost,
+        remainingCoins: this.playerCoins
       };
     }
-    this.playerCoins -= this.PYTHON_UNLOCK_COST;
-    this.pythonUnlockedThisTurn = true;
+    this.playerCoins -= cost;
     return {
       success: true,
+      cost,
+      remainingCoins: this.playerCoins
+    };
+  }
+
+  grantFreePythonUnlock(count = 1) {
+    const add = Math.max(0, parseInt(count, 10) || 0);
+    this.freePythonUnlocks += add;
+    return this.freePythonUnlocks;
+  }
+
+  consumeTacticalCharges({ jumps = 0, shields = 0 } = {}) {
+    if (jumps > 0) {
+      this.jumpCharges = Math.max(0, this.jumpCharges - jumps);
+    }
+    if (shields > 0) {
+      this.shieldCharges = Math.max(0, this.shieldCharges - shields);
+    }
+    return { jumpCharges: this.jumpCharges, shieldCharges: this.shieldCharges };
+  }
+
+  rechargeTacticalCharges(amount = 1) {
+    const add = Math.max(0, parseInt(amount, 10) || 0);
+    const prevJump = this.jumpCharges;
+    const prevShield = this.shieldCharges;
+    this.jumpCharges = Math.min(this.MAX_TACTICAL_CHARGES, this.jumpCharges + add);
+    this.shieldCharges = Math.min(this.MAX_TACTICAL_CHARGES, this.shieldCharges + add);
+    return {
+      jumpGained: this.jumpCharges - prevJump,
+      shieldGained: this.shieldCharges - prevShield,
+      jumpCharges: this.jumpCharges,
+      shieldCharges: this.shieldCharges
+    };
+  }
+
+  applyAutoPythonAssistance() {
+    if (this.playerPos < this.botPos) {
+      this.pythonUnlockedThisTurn = true;
+      this.pythonUnlockReason = 'behind';
+      return { unlocked: true, reason: 'behind' };
+    }
+    if (this.freePythonUnlocks > 0) {
+      this.freePythonUnlocks -= 1;
+      this.pythonUnlockedThisTurn = true;
+      this.pythonUnlockReason = 'common_miss';
+      return { unlocked: true, reason: 'common_miss', remainingPasses: this.freePythonUnlocks };
+    }
+    return { unlocked: false, reason: null };
+  }
+
+  unlockPythonForTurn() {
+    if (this.pythonUnlockedThisTurn) {
+      return {
+        success: true,
+        alreadyUnlocked: true,
+        reason: this.pythonUnlockReason,
+        remainingCoins: this.playerCoins
+      };
+    }
+    const spent = this.spendCoins(this.PYTHON_UNLOCK_COST);
+    if (!spent.success) {
+      return spent;
+    }
+    this.pythonUnlockedThisTurn = true;
+    this.pythonUnlockReason = 'coins';
+    return {
+      success: true,
+      reason: 'coins',
       cost: this.PYTHON_UNLOCK_COST,
       remainingCoins: this.playerCoins
     };
@@ -130,6 +204,7 @@ export class GameStateModel {
     if (this.phase === 'game_over') return;
 
     this.pythonUnlockedThisTurn = false;
+    this.pythonUnlockReason = null;
     if (this.currentTurn === 'player') {
       this.currentTurn = 'bot';
     } else {

@@ -296,9 +296,9 @@ export class TutorialView {
     const footerEl = document.getElementById('tutorialGuideFooter');
     const nextBtn = document.getElementById('btnTutorialNextStep');
 
-    if (titleEl) titleEl.textContent = '3. Tradução em Python & Regras da Trilha';
+    if (titleEl) titleEl.textContent = '3. Tradução em Python, Moedas & Regras da Trilha';
     if (textEl) {
-      textEl.innerHTML = `Veja na caixa destacada como seus blocos viraram <strong>código Python real</strong>! Durante a corrida, fique atento às casas do tabuleiro: <strong>⚡ Atalhos</strong> avançam casas extras, <strong>🐛 Bugs</strong> recuam (use <strong>🦘 Pular</strong> ou <strong>🛡️ Escudo try/except</strong> para evitá-los) e <strong>❓ Desafios</strong> dão bônus ao acertar perguntas de Python.`;
+      textEl.innerHTML = `Veja na caixa destacada como seus blocos viraram <strong>código Python real</strong>! Na partida, você usa <strong>🪙 10 moedas</strong> para abrir a tradução no turno ou ganhar <strong>⏱️ +15s</strong> em desafios — mas a tradução fica <strong>grátis automaticamente</strong> se você estiver atrás na corrida ou errar uma Carta Comum! Fique atento às casas: <strong>⚡ Atalhos</strong> avançam extras, <strong>🐛 Bugs</strong> recuam (guarde suas cargas de <strong>🦘 Pular</strong> e <strong>🛡️ Escudo</strong>, recarregadas nos <strong>❓ Desafios</strong>!).`;
     }
     if (taskEl) {
       taskEl.innerHTML = `👉 <strong>Tarefa obrigatória:</strong> Confira seu código no terminal <em>🐍 Tradução em Python</em> e clique no botão abaixo para liberar a execução.`;

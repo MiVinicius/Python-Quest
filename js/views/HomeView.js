@@ -509,7 +509,7 @@ export class HomeView {
                       <h4>Pular</h4>
                       <span class="howto-code-pill pill-purple">player.pular(N)</span>
                     </div>
-                    <p>Realiza um salto acrobático que <strong>ignora armadilhas (Bugs)</strong> caso você aterrisse diretamente sobre uma casa com Bug.</p>
+                    <p>Realiza um salto acrobático que <strong>ignora armadilhas (Bugs)</strong> na casa de destino. Começa com <strong>2 cargas</strong> (máx. 3) — acerte Desafios para recarregar!</p>
                   </div>
                 </div>
 
@@ -531,7 +531,7 @@ export class HomeView {
                       <h4>Condicional if</h4>
                       <span class="howto-code-pill pill-yellow">+1 Passo Bônus</span>
                     </div>
-                    <p>Avalia condições do jogo (<code>dado % 2 == 0</code>, <code>oponente.a_frente</code>, <code>proxima_casa.tem_bug()</code>) e concede <strong>+1 passo extra</strong> se for <code>True</code>!</p>
+                    <p>Avalia a condição ao executar (<code>dado % 2 == 0</code>, <code>oponente.a_frente</code>, <code>proxima_casa.tem_bug()</code>). Se <code>True</code>, executa os blocos internos + <strong>+1 passo bônus</strong> (máx. +1/turno); se <code>False</code>, ignora o corpo!</p>
                   </div>
                 </div>
 
@@ -540,9 +540,9 @@ export class HomeView {
                   <div class="howto-item-content">
                     <div class="howto-item-top">
                       <h4>Escudo Protetor</h4>
-                      <span class="howto-code-pill pill-cyan">try / except (0 passos)</span>
+                      <span class="howto-code-pill pill-cyan">try / except (×2 cargas)</span>
                     </div>
-                    <p>Não consome passos do dado e arma uma blindagem que <strong>anula 100% o recuo</strong> da próxima armadilha (Bug) em que você cair.</p>
+                    <p>Não consome passos do dado e arma uma blindagem que <strong>anula 100% o recuo</strong> do próximo Bug. Começa com <strong>2 cargas</strong> (máx. 3) e recarrega ao acertar Desafios.</p>
                   </div>
                 </div>
 
@@ -550,10 +550,10 @@ export class HomeView {
                   <div class="howto-icon-box icon-amber">🐍</div>
                   <div class="howto-item-content">
                     <div class="howto-item-top">
-                      <h4>Tradução em Python</h4>
-                      <span class="howto-code-pill pill-amber">🔓 10 🪙 por turno</span>
+                      <h4>Tradução em Python & Moedas</h4>
+                      <span class="howto-code-pill pill-amber">🔓 10 🪙 / Grátis atrás</span>
                     </div>
-                    <p>Use as <strong>moedas (🪙)</strong> ganhas nos Desafios para desbloquear o terminal e inspecionar o código Python real gerado pelos seus blocos.</p>
+                    <p>Use <strong>moedas (🪙)</strong> para desbloquear o terminal Python no turno ou comprar <strong>⏱️ +15s</strong> em desafios. Fica <strong>grátis automaticamente</strong> quando você estiver atrás na corrida ou após errar uma Carta Comum!</p>
                   </div>
                 </div>
 
@@ -630,7 +630,7 @@ export class HomeView {
                       <h4>Carta Comum</h4>
                       <span class="howto-code-pill pill-green">Fácil</span>
                     </div>
-                    <p><strong>Acerto:</strong> <code>+2 passos</code> no dado + <strong>🪙 10 moedas</strong>.<br><strong>Erro:</strong> 🛡️ Sem penalidade de recuo.</p>
+                    <p><strong>Acerto:</strong> <code>+2 passos</code> no dado + <strong>🪙 10 moedas</strong>.<br><strong>Erro:</strong> 🛡️ Sem recuo + <strong>🎁 1 Tradução Python Grátis</strong>.</p>
                   </div>
                 </div>
 

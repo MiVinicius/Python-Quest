@@ -1055,6 +1055,41 @@ body {
   font-family: var(--font-code);
 }
 
+.timer-controls-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.btn-extend-time {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.22), rgba(217, 119, 6, 0.28));
+  border: 1px solid rgba(251, 191, 36, 0.55);
+  color: #fde68a;
+  border-radius: var(--radius-md);
+  padding: 6px 10px;
+  font-family: var(--font-ui);
+  font-size: 0.78rem;
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.btn-extend-time:hover:not(:disabled) {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: #020617;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(245, 158, 11, 0.4);
+}
+
+.btn-extend-time.is-used {
+  background: rgba(16, 185, 129, 0.16);
+  border-color: rgba(52, 211, 153, 0.5);
+  color: #6ee7b7;
+}
+
 .timer-box {
   background: rgba(0, 0, 0, 0.4);
   border: 1px solid var(--border-subtle);
@@ -1063,6 +1098,13 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.timer-box.pulse-time-added {
+  border-color: var(--color-success);
+  box-shadow: 0 0 18px var(--color-success-glow);
+  animation: popScale 0.45s ease-out;
 }
 
 .timer-digits {
@@ -1153,6 +1195,34 @@ body {
 .option-correct {
   background: rgba(16, 185, 129, 0.25) !important;
   border-color: var(--color-success) !important;
+}
+
+.option-wrong {
+  background: rgba(239, 68, 68, 0.22) !important;
+  border-color: var(--color-danger) !important;
+  opacity: 1 !important;
+}
+
+.option-result-tag {
+  margin-left: auto;
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.option-result-tag.tag-correct {
+  background: rgba(16, 185, 129, 0.25);
+  color: #6ee7b7;
+  border: 1px solid rgba(52, 211, 153, 0.5);
+}
+
+.option-result-tag.tag-wrong {
+  background: rgba(239, 68, 68, 0.28);
+  color: #fecaca;
+  border: 1px solid rgba(248, 113, 113, 0.55);
 }
 
 .option-disabled {
@@ -1815,6 +1885,20 @@ body {
 .py-comment {
   color: #64748b;
   font-style: italic;
+}
+
+.py-str {
+  color: #86efac;
+}
+
+.py-builtin {
+  color: #67e8f9;
+  font-weight: 600;
+}
+
+.py-dec {
+  color: #fbbf24;
+  font-weight: 700;
 }
 
 /* ==========================================================================
