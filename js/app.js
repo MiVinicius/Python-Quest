@@ -223,10 +223,10 @@ document.addEventListener('DOMContentLoaded', () => {
     soundView.init();
   }, { once: true });
 
-  // Controle de acessibilidade: Tamanho da Fonte (IHM)
+  // Controle de acessibilidade: Tamanho da Interface / Fonte (IHM)
   const FONT_SCALE_KEY = 'python_quest_font_scale_v2';
   const DEFAULT_SCALE = 100;
-  const MIN_SCALE = 90;
+  const MIN_SCALE = 50;
   const MAX_SCALE = 140;
   const STEP_SCALE = 10;
 
@@ -242,23 +242,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!Number.isNaN(saved)) currentFontScale = clampScale(saved);
   } catch (_) {}
 
-  const applyFontScale = (scale) => {
-    currentFontScale = clampScale(scale);
-    document.documentElement.style.setProperty('--user-font-scale', `${currentFontScale}%`);
-    if (btnFontReset) btnFontReset.textContent = `${currentFontScale}%`;
-    if (btnFontDecrease) btnFontDecrease.disabled = currentFontScale <= MIN_SCALE;
-    if (btnFontIncrease) btnFontIncrease.disabled = currentFontScale >= MAX_SCALE;
-    try {
-      localStorage.setItem(FONT_SCALE_KEY, String(currentFontScale));
-    } catch (_) {}
-  };
-
-  applyFontScale(currentFontScale);
-
-  btnFontDecrease?.addEventListener('click', () => applyFontScale(currentFontScale - STEP_SCALE));
-  btnFontIncrease?.addEventListener('click', () => applyFontScale(currentFontScale + STEP_SCALE));
-  btnFontReset?.addEventListener('click', () => applyFontScale(DEFAULT_SCALE));
-
   // Mantém a altura do mapa (.zigzag-board-wrapper) alinhada com a coluna esquerda no desktop
   const syncBoardHeightWithLeftPanel = () => {
     const leftPanel = document.querySelector('.left-panel');
@@ -269,10 +252,32 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
     const leftHeight = leftPanel.offsetHeight;
-    if (leftHeight > 200) {
+    if (leftHeight > 140) {
       boardWrapper.style.height = `${leftHeight}px`;
     }
   };
+
+  const applyFontScale = (scale) => {
+    currentFontScale = clampScale(scale);
+    const scaleRatio = currentFontScale / 100;
+    const compactFactor = Math.min(1, scaleRatio);
+    document.documentElement.style.setProperty('--user-font-scale', `${currentFontScale}%`);
+    document.documentElement.style.setProperty('--user-ui-scale', String(scaleRatio));
+    document.documentElement.style.setProperty('--ui-compact-factor', String(compactFactor));
+    if (btnFontReset) btnFontReset.textContent = `${currentFontScale}%`;
+    if (btnFontDecrease) btnFontDecrease.disabled = currentFontScale <= MIN_SCALE;
+    if (btnFontIncrease) btnFontIncrease.disabled = currentFontScale >= MAX_SCALE;
+    try {
+      localStorage.setItem(FONT_SCALE_KEY, String(currentFontScale));
+    } catch (_) {}
+    requestAnimationFrame(syncBoardHeightWithLeftPanel);
+  };
+
+  applyFontScale(currentFontScale);
+
+  btnFontDecrease?.addEventListener('click', () => applyFontScale(currentFontScale - STEP_SCALE));
+  btnFontIncrease?.addEventListener('click', () => applyFontScale(currentFontScale + STEP_SCALE));
+  btnFontReset?.addEventListener('click', () => applyFontScale(DEFAULT_SCALE));
 
   syncBoardHeightWithLeftPanel();
   window.addEventListener('resize', syncBoardHeightWithLeftPanel);
