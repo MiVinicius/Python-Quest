@@ -56,6 +56,7 @@ export class GameController {
     this.roomCode = null;
     this.opponentName = 'CyberBot';
     this.opponentAvatar = '🤖';
+    this.opponentPresence = 'online';
     this.myInfo = null;
     this.opponentInfo = null;
     this.remoteActionChain = Promise.resolve();
@@ -125,13 +126,17 @@ export class GameController {
       }
     };
 
-    // Ouvinte de eventos remotos do Multiplayer Online (processados em fila sequencial)
+    // Ouvinte de eventos remotos, status de conexão e presença do oponente no Multiplayer Online
     if (this.onlineModel) {
       this.onlineModel.onStateChange((event) => {
         if (event.type === 'REMOTE_ACTION' && this.isOnline) {
           this.remoteActionChain = this.remoteActionChain
             .then(() => this.handleRemoteAction(event))
             .catch((err) => console.error('Erro ao processar ação remota:', err));
+        } else if (event.type === 'CONNECTION_STATUS' && this.isOnline) {
+          this.updateOnlineRoomBadge(event.status);
+        } else if (event.type === 'OPPONENT_PRESENCE' && this.isOnline) {
+          this.handleOpponentPresence(event);
         }
       });
     }
@@ -291,6 +296,8 @@ export class GameController {
     this.gameMode = 'Multiplayer Online';
     this.isOnline = true;
     this.isDemo = false;
+    this.opponentPresence = 'online';
+    this.statusView.hideOpponentDisconnected();
     this.roomCode = roomCode;
     this.playerRole = playerRole; // 'host' ou 'guest'
 
@@ -308,7 +315,7 @@ export class GameController {
     if (restartBtn) restartBtn.style.display = 'none';
     if (tutorialBtn) tutorialBtn.style.display = 'none';
     if (roomBadge) roomBadge.style.display = 'inline-flex';
-    if (roomBadgeText) roomBadgeText.textContent = `Sala: ${roomCode}`;
+    this.updateOnlineRoomBadge(this.onlineModel ? this.onlineModel.connectionTransport : 'relay');
 
     const isHost = (playerRole === 'host');
     this.myInfo = isHost ? hostInfo : guestInfo;
@@ -367,13 +374,60 @@ export class GameController {
     }
   }
 
+  updateOnlineRoomBadge(status = 'relay') {
+    if (!this.isOnline || !this.roomCode) return;
+    const roomBadgeText = document.getElementById('roomCodeBadgeText');
+    if (!roomBadgeText) return;
+    const statusMap = {
+      p2p: '🟢 P2P',
+      relay: '🟡 Relay',
+      reconnecting: '🔄 Reconectando...'
+    };
+    const tag = statusMap[status] || '🟡 Online';
+    roomBadgeText.textContent = `Sala: ${this.roomCode} • ${tag}`;
+  }
+
+  handleOpponentPresence(event) {
+    if (!this.isOnline || this.gameState.phase === 'game_over') return;
+    this.opponentPresence = event.state || 'online';
+
+    if (event.state === 'left') {
+      this.sound.playCompileError();
+      this.gameState.addLog('Multiplayer', `🚪 ${this.opponentName} saiu da partida.`, 'danger');
+      this.boardView.updateOpponentTicker(`🚪 ${this.opponentName} saiu da partida.`);
+      this.statusView.showOpponentDisconnected({ name: this.opponentName, reason: 'left' });
+    } else if (event.state === 'disconnected') {
+      this.sound.playCompileError();
+      this.gameState.addLog(
+        'Multiplayer',
+        `🔌 ${this.opponentName} parece desconectado (sem resposta). Aguardando reconexão...`,
+        'danger'
+      );
+      this.boardView.updateOpponentTicker(`🔌 ${this.opponentName} perdeu a conexão...`);
+      this.statusView.showOpponentDisconnected({ name: this.opponentName, reason: 'timeout' });
+    } else if (event.state === 'unstable') {
+      this.gameState.addLog('Multiplayer', `🟡 Conexão de ${this.opponentName} está instável...`, 'warning');
+      this.boardView.updateOpponentTicker(`🟡 Aguardando sinal de ${this.opponentName}...`);
+    } else if (event.state === 'online' && event.reconnected) {
+      this.statusView.hideOpponentDisconnected();
+      this.sound.playCompileSuccess();
+      this.gameState.addLog('Multiplayer', `🟢 ${this.opponentName} reconectou à partida!`, 'success');
+    }
+
+    this.updateAllViews();
+  }
+
   async handleRemoteAction(event) {
     if (!this.isOnline || event.senderRole === this.playerRole) return;
 
     const action = event.actionName;
     const payload = event.payload || {};
 
+    // Proteção: se já é a nossa vez, jamais deixa um ROLL/MOVE atrasado travar o workspace em Modo Espectador
+    const isAlreadyMyTurn = (this.gameState.currentTurn === 'player' && this.gameState.phase !== 'game_over');
+
     if (action === 'ROLL') {
+      if (isAlreadyMyTurn) return;
       this.gameState.botBoost = 0;
       this.gameState.botStunned = false;
       this.updateAllViews();
@@ -401,6 +455,14 @@ export class GameController {
       const oldPos = this.gameState.botPos;
       const targetPos = payload.newPos;
       this.gameState.botPos = targetPos;
+
+      if (isAlreadyMyTurn) {
+        this.updateAllViews();
+        if (targetPos >= this.gameState.TOTAL_TILES) {
+          this.handleGameOver('bot');
+        }
+        return;
+      }
 
       // Exibe os blocos e o código Python do oponente remoto no workspace e na janela flutuante sobre o tabuleiro!
       this.workspaceView.setSpectatorMode(true, {
@@ -439,6 +501,7 @@ export class GameController {
         this.handleGameOver('bot');
       }
     } else if (action === 'CHALLENGE_START') {
+      if (isAlreadyMyTurn) return;
       this.boardView.showOpponentChallenge({
         avatar: this.opponentAvatar,
         name: this.opponentName,
@@ -461,13 +524,15 @@ export class GameController {
         resultText = `❌ ${this.opponentName} errou${payload.penalty > 0 ? ` e recuou ${payload.penalty} casa(s)` : ''}.`;
       }
 
-      this.boardView.revealOpponentAnswer({
-        selectedIndex: payload.selectedIndex,
-        correctIndex: payload.correctIndex,
-        correct: payload.correct,
-        timeout: payload.timeout,
-        resultText
-      });
+      if (!isAlreadyMyTurn) {
+        this.boardView.revealOpponentAnswer({
+          selectedIndex: payload.selectedIndex,
+          correctIndex: payload.correctIndex,
+          correct: payload.correct,
+          timeout: payload.timeout,
+          resultText
+        });
+      }
       this.gameState.addLog('Multiplayer', resultText, payload.correct ? 'warning' : 'info');
 
       if (typeof payload.newPos === 'number' && payload.newPos !== this.gameState.botPos) {
@@ -484,10 +549,14 @@ export class GameController {
         `${this.opponentName} ativou ${payload.label || 'casa especial'} (${payload.deltaSteps > 0 ? `+${payload.deltaSteps}` : payload.deltaSteps} casas)!`,
         payload.kind === 'shortcut' ? 'warning' : 'info'
       );
-      await this.boardView.animateStepByStep('bot', oldPos, targetPos, (curr) => {
-        this.sound.playStep();
-        this.statusView.updateProgress(this.gameState.playerPos, curr, this.gameState.TOTAL_TILES);
-      });
+      if (!isAlreadyMyTurn) {
+        await this.boardView.animateStepByStep('bot', oldPos, targetPos, (curr) => {
+          this.sound.playStep();
+          this.statusView.updateProgress(this.gameState.playerPos, curr, this.gameState.TOTAL_TILES);
+        });
+      } else {
+        this.updateAllViews();
+      }
       if (targetPos >= this.gameState.TOTAL_TILES) {
         this.handleGameOver('bot');
       }
@@ -501,6 +570,10 @@ export class GameController {
         this.gameState.addLog('Multiplayer', `${this.opponentName} perdeu a vez por atordoamento (Stun)!`, 'warning');
       }
       this.gameState.roundCount = payload.round || this.gameState.roundCount;
+      if (isAlreadyMyTurn) {
+        this.updateAllViews();
+        return;
+      }
       this.gameState.addLog('Multiplayer', `É a sua vez de jogar! Role o dado.`, 'success');
       this.startPlayerTurn();
     } else if (action === 'REMATCH') {
@@ -536,6 +609,8 @@ export class GameController {
     if (this.tutorialView) {
       this.tutorialView.stop();
     }
+    this.opponentPresence = 'online';
+    this.statusView.hideOpponentDisconnected();
     this.gameState.setPhase('game_over');
     if (this.onlineModel) {
       this.onlineModel.leaveRoom();
@@ -565,13 +640,14 @@ export class GameController {
       );
     }
     
-    // Atualiza crachás de status (Boost, Stun e Escudo)
+    // Atualiza crachás de status (Boost, Stun, Escudo e Presença Online)
     this.statusView.updateStatusBadges(
       this.gameState.playerBoost,
       this.gameState.playerStunned,
       this.gameState.botStunned,
       this.isOnline,
-      this.gameState.botBoost
+      this.gameState.botBoost,
+      this.opponentPresence
     );
 
     if (this.gameState.playerShielded) {
@@ -1188,6 +1264,7 @@ export class GameController {
     this.gameState.setPhase('game_over');
     this.sound.playVictory();
     this.boardView.hideOpponentWindow();
+    this.statusView.hideOpponentDisconnected();
     
     const isPlayer = (winner === 'player' || winner === 'p1');
     const winnerName = isPlayer ? (this.userProfile ? this.userProfile.data.nickname : 'Você') : this.opponentName;

@@ -1,11 +1,13 @@
 /**
  * OnlineMultiplayerModel.js
  * Sistema Multiplayer Serverless 100% compatível com GitHub Pages e Execução Local.
- * Combina 3 camadas simultâneas com deduplicação automática por seqId/actionId:
- * 1. BroadcastChannel + Storage Events para sincronização instantânea (< 1ms) entre abas do mesmo navegador.
- * 2. WebRTC Peer-to-Peer (PeerJS DataChannel com STUN + TURN) entre navegadores/computadores diferentes.
- * 3. WebSocket Serverless Relay (WSS/HTTPS) como fallback automático contra bloqueios de mDNS/Firewall/NAT no Windows.
- * 4. Matchmaking Automático ("⚡ Partida Rápida") com descoberta ativa de Host e proteção contra slots fantasmas.
+ * Arquitetura resiliente em 3 camadas com entrega garantida e ordenada:
+ * 1. BroadcastChannel + Storage Events (< 1ms entre abas do mesmo navegador).
+ * 2. WebRTC Peer-to-Peer (PeerJS DataChannel com STUN + TURN) com upgrade contínuo mesmo após o início da sala.
+ * 3. Relay HTTPS/WSS (ntfy.sh) com fila serializada de POST, retry/backoff em HTTP 429,
+ *    reconexão automática de WebSocket via ?since=<lastId> e fallback por HTTP polling.
+ * 4. Protocolo de confiabilidade na camada de aplicação: ordenação estrita por seqId,
+ *    confirmação consolidada (ACTION_ACK), reenvio automático e RESEND_REQUEST para lacunas.
  */
 export class OnlineMultiplayerModel {
   constructor() {
@@ -18,8 +20,17 @@ export class OnlineMultiplayerModel {
     this.isQuickMatchSearching = false;
     this.listeners = [];
 
+    // Controle de sequência, ordenação, deduplicação e ACK
     this.outgoingSeqId = 0;
     this.processedActionIds = new Set();
+    this.sentActionHistory = new Map(); // seqId -> actionPacket
+    this.unackedActions = new Map(); // seqId -> { packet, sentAt, lastAttemptAt, attempts }
+    this.expectedRemoteSeqId = 1;
+    this.remoteReorderBuffer = new Map(); // seqId -> actionPacket
+    this.reorderGapTimer = null;
+    this.ackRetryTimer = null;
+    this.relayAckDebounceTimer = null;
+    this.pendingRelayAckSeq = 0;
 
     // WebRTC (PeerJS)
     this.PeerClass = null;
@@ -28,18 +39,41 @@ export class OnlineMultiplayerModel {
     this.activeConnections = [];
     this.pendingOutgoingQueue = [];
     this.mmPeer = null;
+    this.peerConnectRetryTimer = null;
 
-    // WebSocket Serverless Relay (para 2 navegadores diferentes no mesmo PC quando mDNS/UDP falha)
+    // Relay WebSocket + HTTP Polling + Fila serializada de POST
     this.roomWs = null;
     this.roomWsTopic = null;
+    this.roomRelayShouldStayOpen = false;
+    this.roomWsReconnectTimer = null;
+    this.roomWsReconnectAttempt = 0;
+    this.lastRoomRelayMsgId = null;
+    this.lastRoomRelayMsgTime = 0;
+    this.lastRoomRelayActivityAt = 0;
+    this.roomPollTimer = null;
+    this.isPollingRelay = false;
+    this.relayPostQueue = [];
+    this.isFlushingRelayQueue = false;
+
+    // QuickMatch / Join timers
     this.qmWs = null;
     this.qmAnnounceTimer = null;
     this.joinRetryTimer = null;
+    this.pendingGuestProfile = null;
+    this.pendingJoinResolve = null;
+    this.connectionTransport = 'idle'; // 'idle' | 'p2p' | 'relay' | 'reconnecting'
+
+    // Monitoramento de presença do oponente (saída imediata + queda silenciosa)
+    this.lastOpponentSeenAt = 0;
+    this.lastHeartbeatSentAt = 0;
+    this.opponentPresenceState = 'online'; // 'online' | 'unstable' | 'disconnected' | 'left'
+    this.presenceTimer = null;
+    this.hasSentLeaveSignal = false;
 
     // Canal local para sincronização instantânea entre abas do mesmo navegador
     this.channel = null;
     this.setupSyncChannel();
-    this.setupUnloadCleanup();
+    this.setupLifecycleListeners();
   }
 
   getPeerOptions() {
@@ -82,7 +116,7 @@ export class OnlineMultiplayerModel {
       this.PeerClass = mod.Peer || mod.default;
       return this.PeerClass;
     } catch (err) {
-      console.info('PeerJS CDN indisponível: usando BroadcastChannel / WebSocket Relay.');
+      console.info('PeerJS CDN indisponível: usando BroadcastChannel / Relay.');
       return null;
     }
   }
@@ -92,7 +126,7 @@ export class OnlineMultiplayerModel {
       if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
         this.channel = new BroadcastChannel('python_quest_p2p_sync');
         this.channel.onmessage = (event) => {
-          this.handleIncomingMessage(event.data);
+          this.handleIncomingMessage(event.data, 'local');
         };
       }
       if (typeof window !== 'undefined') {
@@ -100,7 +134,7 @@ export class OnlineMultiplayerModel {
           if (event.key && event.key.startsWith('py_sync_evt_') && event.newValue) {
             try {
               const data = JSON.parse(event.newValue);
-              this.handleIncomingMessage(data);
+              this.handleIncomingMessage(data, 'local');
             } catch (e) {}
           }
         });
@@ -110,14 +144,34 @@ export class OnlineMultiplayerModel {
     }
   }
 
-  setupUnloadCleanup() {
+  setupLifecycleListeners() {
     if (typeof window === 'undefined') return;
     const cleanup = () => {
+      this.notifyPlayerLeft(true);
       this.clearQuickMatchQueueIfMine();
       this.cleanupPeers();
     };
     window.addEventListener('beforeunload', cleanup);
     window.addEventListener('pagehide', cleanup);
+
+    // Ao voltar para a aba (comum em mobile) ou recuperar internet, reconecta e puxa eventos pendentes
+    const recoverConnection = () => {
+      if (!this.connected || !this.roomCode) return;
+      if (!this.roomWs || this.roomWs.readyState !== 1) {
+        this.connectRoomRelay(this.roomCode, true);
+      }
+      this.pollRoomRelayOnce();
+      this.retryPendingUnackedActions(true);
+    };
+
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+          recoverConnection();
+        }
+      });
+    }
+    window.addEventListener('online', recoverConnection);
   }
 
   onStateChange(callback) {
@@ -134,6 +188,32 @@ export class OnlineMultiplayerModel {
         console.error('Erro no multiplayer listener:', e);
       }
     });
+  }
+
+  updateConnectionStatus() {
+    let next = 'idle';
+    if (this.connected && this.roomCode) {
+      if (this.isWebRTCOpen()) {
+        next = 'p2p';
+      } else if (this.roomWs && this.roomWs.readyState === 1) {
+        next = 'relay';
+      } else {
+        next = 'reconnecting';
+      }
+    }
+    if (next !== this.connectionTransport) {
+      this.connectionTransport = next;
+      this.notifyListeners({
+        type: 'CONNECTION_STATUS',
+        status: next,
+        roomCode: this.roomCode
+      });
+    }
+  }
+
+  isWebRTCOpen() {
+    if (this.dataConn && this.dataConn.open) return true;
+    return this.activeConnections.some((c) => c && c.open);
   }
 
   getCleanCode(roomCode) {
@@ -156,81 +236,308 @@ export class OnlineMultiplayerModel {
     return 'pq_sync_2026_qm_lobby_v2';
   }
 
-  /**
-   * Conecta ao canal WebSocket Serverless da sala (funciona entre Chrome, Edge, Firefox, Anônimo, etc.)
-   */
-  connectRoomRelay(roomCode) {
-    if (typeof WebSocket === 'undefined') return;
+  resetSessionSequencing() {
+    this.outgoingSeqId = 0;
+    this.expectedRemoteSeqId = 1;
+    this.processedActionIds.clear();
+    this.sentActionHistory.clear();
+    this.unackedActions.clear();
+    this.remoteReorderBuffer.clear();
+    this.pendingRelayAckSeq = 0;
+    this.lastRoomRelayMsgId = null;
+    this.lastRoomRelayMsgTime = 0;
+    this.lastOpponentSeenAt = 0;
+    this.lastHeartbeatSentAt = 0;
+    this.opponentPresenceState = 'online';
+    this.hasSentLeaveSignal = false;
+    this.stopPresenceMonitor();
+    if (this.reorderGapTimer) {
+      clearTimeout(this.reorderGapTimer);
+      this.reorderGapTimer = null;
+    }
+    if (this.relayAckDebounceTimer) {
+      clearTimeout(this.relayAckDebounceTimer);
+      this.relayAckDebounceTimer = null;
+    }
+  }
+
+  // =========================================================================
+  // CAMADA DE RELAY RESILIENTE (WebSocket com reconexão + HTTP Polling + Fila POST)
+  // =========================================================================
+
+  connectRoomRelay(roomCode, forceReconnect = false) {
+    if (typeof WebSocket === 'undefined' || !roomCode) return;
     const topic = this.getRelayRoomTopic(roomCode);
-    if (this.roomWs && this.roomWsTopic === topic && this.roomWs.readyState <= 1) {
+
+    if (
+      !forceReconnect &&
+      this.roomWs &&
+      this.roomWsTopic === topic &&
+      (this.roomWs.readyState === 0 || this.roomWs.readyState === 1)
+    ) {
       return;
     }
 
-    this.closeRoomRelay();
+    this.roomRelayShouldStayOpen = true;
     this.roomWsTopic = topic;
 
-    try {
-      const ws = new WebSocket(`wss://ntfy.sh/${topic}/ws?since=15s`);
-      this.roomWs = ws;
+    if (this.roomWsReconnectTimer) {
+      clearTimeout(this.roomWsReconnectTimer);
+      this.roomWsReconnectTimer = null;
+    }
+    if (this.roomWs) {
+      try {
+        this.roomWs.onopen = null;
+        this.roomWs.onmessage = null;
+        this.roomWs.onerror = null;
+        this.roomWs.onclose = null;
+        this.roomWs.close();
+      } catch (_) {}
+      this.roomWs = null;
+    }
 
-      ws.onmessage = (evt) => {
-        try {
-          const wrapper = JSON.parse(evt.data);
-          if (wrapper && wrapper.event === 'message' && wrapper.message) {
-            const payload = JSON.parse(wrapper.message);
-            if (payload && payload.senderTabId !== this.tabId) {
-              this.handleIncomingMessage(payload);
-            }
-          }
-        } catch (_) {}
+    const sinceParam = this.lastRoomRelayMsgId
+      ? encodeURIComponent(this.lastRoomRelayMsgId)
+      : '30s';
+
+    try {
+      const ws = new WebSocket(`wss://ntfy.sh/${topic}/ws?since=${sinceParam}`);
+      this.roomWs = ws;
+      this.updateConnectionStatus();
+
+      ws.onopen = () => {
+        if (this.roomWs !== ws) return;
+        this.roomWsReconnectAttempt = 0;
+        this.lastRoomRelayActivityAt = Date.now();
+        this.updateConnectionStatus();
       };
 
-      ws.onerror = () => {};
+      ws.onmessage = (evt) => {
+        if (this.roomWs !== ws) return;
+        this.lastRoomRelayActivityAt = Date.now();
+        this.processRelayWrapperLine(evt.data);
+      };
+
+      ws.onerror = () => {
+        // O fechamento subsequente (onclose) aciona a reconexão com backoff
+      };
+
+      ws.onclose = () => {
+        if (this.roomWs !== ws) return;
+        this.roomWs = null;
+        this.updateConnectionStatus();
+        if (this.roomRelayShouldStayOpen && this.roomCode) {
+          this.scheduleRoomRelayReconnect();
+        }
+      };
+    } catch (_) {
+      this.updateConnectionStatus();
+      if (this.roomRelayShouldStayOpen && this.roomCode) {
+        this.scheduleRoomRelayReconnect();
+      }
+    }
+
+    this.startRoomRelayPolling();
+    this.startAckRetryMonitor();
+  }
+
+  scheduleRoomRelayReconnect() {
+    if (this.roomWsReconnectTimer || !this.roomRelayShouldStayOpen || !this.roomCode) return;
+    const delay = Math.min(8000, 1000 * Math.pow(2, this.roomWsReconnectAttempt));
+    this.roomWsReconnectAttempt = Math.min(this.roomWsReconnectAttempt + 1, 4);
+    this.roomWsReconnectTimer = setTimeout(() => {
+      this.roomWsReconnectTimer = null;
+      if (this.roomRelayShouldStayOpen && this.roomCode) {
+        this.connectRoomRelay(this.roomCode, true);
+        this.pollRoomRelayOnce();
+      }
+    }, delay);
+  }
+
+  processRelayWrapperLine(rawLine) {
+    if (!rawLine || typeof rawLine !== 'string') return;
+    try {
+      const wrapper = JSON.parse(rawLine);
+      if (!wrapper) return;
+      if (wrapper.id && wrapper.event === 'message') {
+        const msgTime = typeof wrapper.time === 'number' ? wrapper.time : 0;
+        if (msgTime >= this.lastRoomRelayMsgTime) {
+          this.lastRoomRelayMsgTime = msgTime;
+          this.lastRoomRelayMsgId = wrapper.id;
+        }
+      }
+      if (wrapper.event === 'message' && wrapper.message) {
+        const payload = JSON.parse(wrapper.message);
+        if (payload && payload.senderTabId !== this.tabId) {
+          this.handleIncomingMessage(payload, 'relay');
+        }
+      }
     } catch (_) {}
   }
 
+  startRoomRelayPolling() {
+    if (this.roomPollTimer) return;
+    this.roomPollTimer = setInterval(() => {
+      if (!this.roomRelayShouldStayOpen || !this.roomCode) return;
+      const wsOpen = Boolean(this.roomWs && this.roomWs.readyState === 1);
+      const staleMs = Date.now() - (this.lastRoomRelayActivityAt || 0);
+      // Faz polling rápido (3.5s) se WebSocket caiu ou se há lacuna/WebRTC fechado e sem atividade recente
+      if (!wsOpen || this.remoteReorderBuffer.size > 0 || (!this.isWebRTCOpen() && staleMs > 7000)) {
+        this.pollRoomRelayOnce();
+      }
+    }, 3500);
+  }
+
+  async pollRoomRelayOnce() {
+    if (this.isPollingRelay || !this.roomCode || typeof fetch === 'undefined') return;
+    this.isPollingRelay = true;
+    const topic = this.getRelayRoomTopic(this.roomCode);
+    const sinceParam = this.lastRoomRelayMsgId
+      ? encodeURIComponent(this.lastRoomRelayMsgId)
+      : '90s';
+
+    try {
+      const res = await fetch(`https://ntfy.sh/${topic}/json?poll=1&since=${sinceParam}`, {
+        cache: 'no-store'
+      });
+      if (res.ok) {
+        const text = await res.text();
+        if (text) {
+          const lines = text.split('\n');
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (trimmed) this.processRelayWrapperLine(trimmed);
+          }
+        }
+      }
+    } catch (_) {
+      // Silencia falha transitória de rede no polling; próxima iteração tenta de novo
+    } finally {
+      this.isPollingRelay = false;
+    }
+  }
+
   closeRoomRelay() {
+    this.roomRelayShouldStayOpen = false;
+    if (this.roomWsReconnectTimer) {
+      clearTimeout(this.roomWsReconnectTimer);
+      this.roomWsReconnectTimer = null;
+    }
+    if (this.roomPollTimer) {
+      clearInterval(this.roomPollTimer);
+      this.roomPollTimer = null;
+    }
+    if (this.ackRetryTimer) {
+      clearInterval(this.ackRetryTimer);
+      this.ackRetryTimer = null;
+    }
     if (this.roomWs) {
       try {
+        this.roomWs.onopen = null;
         this.roomWs.onmessage = null;
+        this.roomWs.onerror = null;
+        this.roomWs.onclose = null;
         this.roomWs.close();
       } catch (_) {}
       this.roomWs = null;
       this.roomWsTopic = null;
     }
+    this.relayPostQueue = [];
+    this.updateConnectionStatus();
   }
 
-  sendToRelayTopic(topic, payload) {
+  /**
+   * Enfileira envios POST para o Relay em ordem estrita (FIFO), com checagem de HTTP 429/5xx e retry.
+   */
+  sendToRelayTopic(topic, payload, options = {}) {
     if (!topic || typeof fetch === 'undefined') return;
     const packet = {
       ...payload,
       senderTabId: this.tabId,
       sentAt: Date.now()
     };
-    try {
-      fetch(`https://ntfy.sh/${topic}`, {
-        method: 'POST',
-        body: JSON.stringify(packet)
-      }).catch(() => {});
-    } catch (_) {}
+
+    if (options.immediate) {
+      this._postRelayWithRetry(topic, packet, options.maxRetries ?? 2);
+      return;
+    }
+
+    if (this.relayPostQueue.length < 80) {
+      this.relayPostQueue.push({
+        topic,
+        packet,
+        maxRetries: options.maxRetries ?? 4
+      });
+    }
+    this.flushRelayPostQueue();
   }
 
-  sendRoomRelay(payload) {
+  async flushRelayPostQueue() {
+    if (this.isFlushingRelayQueue) return;
+    this.isFlushingRelayQueue = true;
+
+    try {
+      while (this.relayPostQueue.length > 0) {
+        const item = this.relayPostQueue.shift();
+        await this._postRelayWithRetry(item.topic, item.packet, item.maxRetries);
+      }
+    } finally {
+      this.isFlushingRelayQueue = false;
+    }
+  }
+
+  async _postRelayWithRetry(topic, packet, maxRetries = 4) {
+    const body = JSON.stringify(packet);
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const res = await fetch(`https://ntfy.sh/${topic}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+          body
+        });
+        if (res.ok) return true;
+
+        // Rate limit (429) ou erro transitório de servidor (5xx) -> aguarda backoff e tenta novamente
+        if ((res.status === 429 || res.status >= 500) && attempt < maxRetries) {
+          const retryAfterHeader = parseInt(res.headers?.get?.('Retry-After'), 10);
+          const backoffMs = !Number.isNaN(retryAfterHeader) && retryAfterHeader > 0
+            ? Math.min(6000, retryAfterHeader * 1000)
+            : Math.min(4000, 700 * Math.pow(2, attempt));
+          await new Promise((r) => setTimeout(r, backoffMs));
+          continue;
+        }
+        return false;
+      } catch (_) {
+        if (attempt < maxRetries) {
+          const backoffMs = Math.min(4000, 700 * Math.pow(2, attempt));
+          await new Promise((r) => setTimeout(r, backoffMs));
+          continue;
+        }
+        return false;
+      }
+    }
+    return false;
+  }
+
+  sendRoomRelay(payload, options = {}) {
     if (!this.roomCode) return;
     const topic = this.getRelayRoomTopic(this.roomCode);
     this.sendToRelayTopic(topic, {
       ...payload,
       roomCode: this.roomCode
-    });
+    }, options);
   }
+
+  // =========================================================================
+  // CRIAÇÃO E CONEXÃO DE SALAS (PRIVADA & PARTIDA RÁPIDA)
+  // =========================================================================
 
   /**
    * Cria uma sala privada com código PY-XXXX (Host).
    */
   async createRoom(userProfile, customCode = null) {
     this.cleanupPeers();
-    this.processedActionIds.clear();
-    this.outgoingSeqId = 0;
+    this.resetSessionSequencing();
     this.hasAcceptedGuest = false;
 
     const randomDigits = Math.floor(1000 + Math.random() * 9000);
@@ -243,7 +550,7 @@ export class OnlineMultiplayerModel {
       code: this.roomCode,
       sessionId: this.roomSessionId,
       hostTabId: this.tabId,
-      status: 'waiting', // 'waiting' | 'ready' | 'playing' | 'ended'
+      status: 'waiting',
       host: {
         nickname: userProfile.nickname || 'Host',
         avatar: userProfile.avatar || '🐍',
@@ -261,7 +568,7 @@ export class OnlineMultiplayerModel {
     this.currentRoomState = initialRoomState;
     this.saveLocalRoom(initialRoomState);
 
-    // 1. Conecta imediatamente ao Relay WebSocket da sala (entre navegadores diferentes)
+    // 1. Conecta imediatamente ao Relay WebSocket da sala
     this.connectRoomRelay(this.roomCode);
 
     // 2. Notifica abas do mesmo navegador
@@ -271,7 +578,7 @@ export class OnlineMultiplayerModel {
       roomState: initialRoomState
     });
 
-    // 3. Inicializa Host WebRTC Peer (aguarda até estar registrado ou timeout rápido de 1.8s)
+    // 3. Inicializa Host WebRTC Peer (não bloqueia a UI por muito tempo, mas segue escutando)
     await this.initWebRTCHost(initialRoomState);
 
     return initialRoomState;
@@ -290,23 +597,37 @@ export class OnlineMultiplayerModel {
         }
       };
 
-      const timer = setTimeout(() => done(false), 1800);
+      const timer = setTimeout(() => done(false), 2400);
 
       try {
         const peerId = this.getPeerRoomId(roomState.code);
-        this.peer = new Peer(peerId, this.getPeerOptions());
+        const peer = new Peer(peerId, this.getPeerOptions());
+        this.peer = peer;
 
-        this.peer.on('open', () => {
+        peer.on('open', () => {
           clearTimeout(timer);
           done(true);
         });
 
-        this.peer.on('connection', (conn) => {
+        peer.on('connection', (conn) => {
+          if (this.peer !== peer) return;
           this.dataConn = conn;
           this.setupDataConnection(conn, roomState);
         });
 
-        this.peer.on('error', (err) => {
+        peer.on('disconnected', () => {
+          if (this.peer === peer && this.connected && !peer.destroyed) {
+            setTimeout(() => {
+              try {
+                if (this.peer === peer && !peer.destroyed && peer.disconnected) {
+                  peer.reconnect();
+                }
+              } catch (_) {}
+            }, 1500);
+          }
+        });
+
+        peer.on('error', (err) => {
           clearTimeout(timer);
           console.debug('Aviso PeerJS Host:', err.type || err.message);
           done(false);
@@ -324,43 +645,58 @@ export class OnlineMultiplayerModel {
     if (!this.activeConnections.includes(conn)) {
       this.activeConnections.push(conn);
     }
+    this.updateConnectionStatus();
     this.flushPendingOutgoing();
+  }
+
+  unregisterConn(conn) {
+    if (!conn) return;
+    this.activeConnections = this.activeConnections.filter((c) => c !== conn);
+    if (this.dataConn === conn) {
+      this.dataConn = this.activeConnections.find((c) => c && c.open) || null;
+    }
+    this.updateConnectionStatus();
   }
 
   flushPendingOutgoing() {
     if (!this.pendingOutgoingQueue.length) return;
-    const openConns = this.activeConnections.filter((c) => c && c.open);
-    if (!openConns.length && !(this.dataConn && this.dataConn.open)) return;
+    if (!this.isWebRTCOpen()) return;
 
     while (this.pendingOutgoingQueue.length > 0) {
       const pkt = this.pendingOutgoingQueue.shift();
-      this.sendRawWebRTC(pkt);
+      // Não reenvia pacotes PLAYER_ACTION que já foram confirmados via ACK pelo Relay
+      if (pkt && pkt.type === 'PLAYER_ACTION' && pkt.seqId && !this.unackedActions.has(pkt.seqId)) {
+        continue;
+      }
+      this.sendRawWebRTC(pkt, false);
     }
   }
 
-  sendRawWebRTC(pkt) {
+  sendRawWebRTC(pkt, queueIfClosed = true) {
     const targets = new Set(this.activeConnections.filter((c) => c && c.open));
     if (this.dataConn && this.dataConn.open) {
       targets.add(this.dataConn);
     }
     if (targets.size === 0) {
-      if (this.pendingOutgoingQueue.length < 50) {
+      if (queueIfClosed && this.pendingOutgoingQueue.length < 40) {
         this.pendingOutgoingQueue.push(pkt);
       }
-      return;
+      return false;
     }
+    let sentAny = false;
     targets.forEach((conn) => {
       try {
         conn.send(pkt);
+        sentAny = true;
       } catch (e) {
         console.warn('Erro ao enviar pacote WebRTC:', e);
       }
     });
+    return sentAny;
   }
 
   /**
-   * Processa a entrada de um Guest no Host de forma idempotente
-   * (funciona via BroadcastChannel, WebRTC DataChannel ou WebSocket Relay).
+   * Processa a entrada de um Guest no Host de forma idempotente.
    */
   acceptGuestOnHost(guestProfile, roomStateRef = null, sourceConn = null) {
     if (this.playerRole !== 'host' || !guestProfile) return;
@@ -383,7 +719,6 @@ export class OnlineMultiplayerModel {
       actionId: `accept_${this.roomCode}_${Date.now()}`
     };
 
-    // Envia confirmação por TODOS os canais para garantir que o Guest receba imediatamente
     if (sourceConn) {
       if (sourceConn.open) {
         try { sourceConn.send(acceptPacket); } catch (_) {}
@@ -393,7 +728,7 @@ export class OnlineMultiplayerModel {
         });
       }
     }
-    this.sendRawWebRTC(acceptPacket);
+    this.sendRawWebRTC(acceptPacket, false);
     this.broadcastMessage(acceptPacket);
     this.sendRoomRelay(acceptPacket);
 
@@ -403,6 +738,7 @@ export class OnlineMultiplayerModel {
       this.isQuickMatchSearching = false;
       this.stopQuickMatchLobbyWatch();
       this.clearQuickMatchQueueIfMine();
+      this.startPresenceMonitor();
       this.notifyListeners({ type: 'OPPONENT_CONNECTED', room, role: 'host' });
     }
   }
@@ -410,9 +746,9 @@ export class OnlineMultiplayerModel {
   setupDataConnection(conn, roomStateRef = null) {
     if (!conn) return;
 
-    const sendJoinIfGuest = () => {
+    const onOpen = () => {
       this.registerActiveConn(conn);
-      if (this.playerRole === 'guest' && this.pendingGuestProfile) {
+      if (this.playerRole === 'guest' && this.pendingGuestProfile && this.pendingJoinResolve) {
         try {
           conn.send({
             type: 'P2P_JOIN_REQUEST',
@@ -421,16 +757,25 @@ export class OnlineMultiplayerModel {
             senderTabId: this.tabId
           });
         } catch (_) {}
+      } else if (this.connected && this.roomCode) {
+        // Handshake leve ao subir o canal P2P em segundo plano durante uma partida já ativa
+        try {
+          conn.send({
+            type: 'P2P_CHANNEL_READY',
+            roomCode: this.roomCode,
+            senderRole: this.playerRole,
+            senderTabId: this.tabId,
+            maxReceivedSeqId: this.expectedRemoteSeqId - 1
+          });
+        } catch (_) {}
       }
     };
 
     if (conn.open) {
-      sendJoinIfGuest();
+      onOpen();
     }
 
-    conn.on('open', () => {
-      sendJoinIfGuest();
-    });
+    conn.on('open', onOpen);
 
     conn.on('data', (data) => {
       this.registerActiveConn(conn);
@@ -441,8 +786,16 @@ export class OnlineMultiplayerModel {
       } else if (data.type === 'P2P_JOIN_ACCEPTED' && this.playerRole === 'guest') {
         this.handleJoinAcceptedOnGuest(data);
       } else {
-        this.handleIncomingMessage(data);
+        this.handleIncomingMessage(data, 'webrtc');
       }
+    });
+
+    conn.on('close', () => {
+      this.unregisterConn(conn);
+    });
+
+    conn.on('error', () => {
+      this.unregisterConn(conn);
     });
   }
 
@@ -459,6 +812,7 @@ export class OnlineMultiplayerModel {
       this.saveLocalRoom(data.room);
     }
     this.connectRoomRelay(this.roomCode);
+    this.startPresenceMonitor();
 
     if (this.joinRetryTimer) {
       clearInterval(this.joinRetryTimer);
@@ -477,8 +831,7 @@ export class OnlineMultiplayerModel {
    */
   async joinRoom(code, userProfile) {
     this.cleanupPeers();
-    this.processedActionIds.clear();
-    this.outgoingSeqId = 0;
+    this.resetSessionSequencing();
     this.hasAcceptedGuest = false;
 
     let formattedCode = (code || '').toUpperCase().trim();
@@ -523,11 +876,12 @@ export class OnlineMultiplayerModel {
         roomCode: formattedCode,
         guest: guestProfile
       });
+      this.startPresenceMonitor();
 
       return { success: true, room: localRoom };
     }
 
-    // 2. Dois navegadores diferentes (ou PCs diferentes): usa WebSocket Relay + WebRTC (PeerJS) em paralelo!
+    // 2. Navegadores ou cidades diferentes: conecta ao Relay + inicia upgrade WebRTC em paralelo!
     this.connectRoomRelay(formattedCode);
     const Peer = await this.loadPeerJS();
 
@@ -545,14 +899,13 @@ export class OnlineMultiplayerModel {
       };
 
       this.pendingGuestProfile = guestProfile;
-      this.pendingJoinResolve = finish;
 
       const timeout = setTimeout(() => {
         finish({
           success: false,
           message: `Sala ${formattedCode} não encontrada ou o anfitrião já iniciou a partida.`
         });
-      }, 8000);
+      }, 10000);
 
       const wrappedFinish = (res) => {
         clearTimeout(timeout);
@@ -560,7 +913,7 @@ export class OnlineMultiplayerModel {
       };
       this.pendingJoinResolve = wrappedFinish;
 
-      // Envia pedido de entrada imediato pelo WebSocket Relay e BroadcastChannel
+      // Envia pedido de entrada pelo Relay e BroadcastChannel (intervalo amigável ao rate limit)
       const sendJoinSignals = () => {
         if (settled) return;
         const joinReq = {
@@ -577,35 +930,62 @@ export class OnlineMultiplayerModel {
       };
 
       sendJoinSignals();
-      this.joinRetryTimer = setInterval(sendJoinSignals, 950);
+      this.joinRetryTimer = setInterval(sendJoinSignals, 1800);
 
-      // Também inicia conexão direta WebRTC via PeerJS com auto-retry se o Host ainda estiver abrindo
+      // Inicia WebRTC via PeerJS SEM abortar quando settled=true (permite upgrade P2P durante a partida!)
       if (Peer) {
         try {
-          this.peer = new Peer(this.getPeerOptions());
+          const peer = new Peer(this.getPeerOptions());
+          this.peer = peer;
           const hostPeerId = this.getPeerRoomId(formattedCode);
+          let connectAttempts = 0;
 
           const attemptPeerConnect = () => {
-            if (settled || !this.peer || this.peer.destroyed) return;
+            if (
+              this.peer !== peer ||
+              peer.destroyed ||
+              this.playerRole !== 'guest' ||
+              this.roomCode !== formattedCode ||
+              this.isWebRTCOpen()
+            ) {
+              return;
+            }
+            connectAttempts += 1;
             try {
-              const conn = this.peer.connect(hostPeerId, {
+              const conn = peer.connect(hostPeerId, {
                 reliable: true,
                 serialization: 'json'
               });
               this.dataConn = conn;
-              this.connected = true;
               this.setupDataConnection(conn);
             } catch (_) {}
           };
 
-          this.peer.on('open', () => {
+          peer.on('open', () => {
             attemptPeerConnect();
           });
 
-          this.peer.on('error', (err) => {
-            // Se o Host ainda estiver registrando o Peer ou se o WebSocket Relay resolver, tentamos novamente sem abortar
-            if (!settled && err && err.type === 'peer-unavailable') {
-              setTimeout(() => attemptPeerConnect(), 900);
+          peer.on('disconnected', () => {
+            if (this.peer === peer && this.connected && !peer.destroyed) {
+              setTimeout(() => {
+                try {
+                  if (this.peer === peer && !peer.destroyed && peer.disconnected) {
+                    peer.reconnect();
+                  }
+                } catch (_) {}
+              }, 1500);
+            }
+          });
+
+          peer.on('error', (err) => {
+            if (
+              err &&
+              err.type === 'peer-unavailable' &&
+              connectAttempts < 4 &&
+              this.peer === peer &&
+              this.roomCode === formattedCode
+            ) {
+              this.peerConnectRetryTimer = setTimeout(() => attemptPeerConnect(), 1500);
             }
           });
         } catch (_) {}
@@ -615,14 +995,12 @@ export class OnlineMultiplayerModel {
 
   /**
    * ⚡ PARTIDA RÁPIDA (Matchmaking Automático sem precisar digitar código).
-   * Conecta instantaneamente dois jogadores que clicarem em "Partida Rápida"
-   * (seja em abas do mesmo navegador, em 2 navegadores diferentes no mesmo PC, ou em PCs diferentes).
    */
   async startQuickMatch(userProfile) {
     this.isQuickMatchSearching = true;
     this.hasAcceptedGuest = false;
 
-    // 1. Verifica fila local imediata (outra aba no mesmo navegador já aguardando Partida Rápida)
+    // 1. Verifica fila local imediata (outra aba no mesmo navegador)
     const waitingLocal = this.getQuickMatchWaitingRoom();
     if (waitingLocal && waitingLocal.hostTabId !== this.tabId) {
       this.clearQuickMatchQueue();
@@ -637,7 +1015,7 @@ export class OnlineMultiplayerModel {
       }
     }
 
-    // 2. Procura oponente aguardando em outro navegador via WebSocket Lobby (rápido: ~950ms)
+    // 2. Procura oponente aguardando em outro navegador/cidade via Lobby Relay
     const discoveredRoomCode = await this.seekWaitingQuickMatchHost();
     if (!this.isQuickMatchSearching) return null;
 
@@ -653,14 +1031,12 @@ export class OnlineMultiplayerModel {
       }
     }
 
-    // 3. Nenhum Host encontrado: criamos nossa sala IMEDIATAMENTE e registramos na fila local + global!
+    // 3. Nenhum Host encontrado: cria sala imediatamente e anuncia no lobby
     const room = await this.createRoom(userProfile);
     if (!this.isQuickMatchSearching) return null;
 
     this.setQuickMatchWaitingRoom(room.code);
     this.startQuickMatchHostWatch(room, userProfile);
-
-    // Também escuta no primeiro slot livre do PeerJS para compatibilidade P2P pura
     this.claimPeerJSMatchmakingSlotInBackground(room);
 
     return {
@@ -670,9 +1046,6 @@ export class OnlineMultiplayerModel {
     };
   }
 
-  /**
-   * Procura por ~950ms se já há outro navegador aguardando na Partida Rápida.
-   */
   seekWaitingQuickMatchHost() {
     return new Promise((resolve) => {
       if (typeof WebSocket === 'undefined') {
@@ -689,17 +1062,17 @@ export class OnlineMultiplayerModel {
       };
 
       const topic = this.getRelayQuickMatchTopic();
-      const timer = setTimeout(() => done(null), 950);
+      const timer = setTimeout(() => done(null), 1300);
 
       try {
-        const ws = new WebSocket(`wss://ntfy.sh/${topic}/ws?since=20s`);
+        const ws = new WebSocket(`wss://ntfy.sh/${topic}/ws?since=25s`);
         this.qmWs = ws;
 
         ws.onopen = () => {
           this.sendToRelayTopic(topic, {
             type: 'QM_SEEK_HOST',
             seekerTabId: this.tabId
-          });
+          }, { immediate: true, maxRetries: 1 });
         };
 
         ws.onmessage = (evt) => {
@@ -709,8 +1082,7 @@ export class OnlineMultiplayerModel {
             const msg = JSON.parse(wrapper.message);
             if (!msg || msg.senderTabId === this.tabId) return;
 
-            // Ignora mensagens antigas (> 25s)
-            if (msg.sentAt && Date.now() - msg.sentAt > 25000) return;
+            if (msg.sentAt && Math.abs(Date.now() - msg.sentAt) > 30000) return;
 
             if (
               (msg.type === 'QM_HOST_AVAILABLE' || msg.type === 'QM_HOST_ANNOUNCEMENT') &&
@@ -733,11 +1105,6 @@ export class OnlineMultiplayerModel {
     });
   }
 
-  /**
-   * Enquanto aguardamos como Host na Partida Rápida:
-   * - Responde a qualquer outro navegador que enviar QM_SEEK_HOST
-   * - Resolve empate automaticamente caso 2 navegadores tenham clicado em "Partida Rápida" no mesmo instante!
-   */
   startQuickMatchHostWatch(room, userProfile) {
     this.stopQuickMatchLobbyWatch();
     const topic = this.getRelayQuickMatchTopic();
@@ -752,7 +1119,7 @@ export class OnlineMultiplayerModel {
         createdAt: room.createdAt
       };
       this.broadcastMessage(packet);
-      this.sendToRelayTopic(topic, packet);
+      this.sendToRelayTopic(topic, packet, { immediate: true, maxRetries: 1 });
     };
 
     try {
@@ -779,18 +1146,17 @@ export class OnlineMultiplayerModel {
                 hostTabId: this.tabId,
                 seekerTabId: msg.seekerTabId,
                 createdAt: room.createdAt
-              });
+              }, { immediate: true, maxRetries: 1 });
             } else if (
               (msg.type === 'QM_HOST_ANNOUNCEMENT' || msg.type === 'QM_HOST_AVAILABLE') &&
               msg.roomCode &&
               msg.roomCode !== room.code
             ) {
-              // Desempate determinístico se 2 navegadores criaram sala ao mesmo tempo:
-              // O navegador que criou depois (ou com tabId maior) conecta como Guest na sala do outro!
-              const otherTime = msg.createdAt || 0;
-              const myTime = room.createdAt || 0;
-              const shouldYieldToOtherHost =
-                otherTime < myTime || (otherTime === myTime && String(msg.senderTabId) < String(this.tabId));
+              // Desempate determinístico imune a diferença de relógio entre cidades:
+              // compara o código/tabId lexicograficamente (sempre exatamente um cede e o outro hospeda)
+              const otherKey = `${msg.roomCode}_${msg.senderTabId || ''}`;
+              const myKey = `${room.code}_${this.tabId}`;
+              const shouldYieldToOtherHost = otherKey < myKey;
 
               if (shouldYieldToOtherHost && this.isQuickMatchSearching && !this.hasAcceptedGuest) {
                 this.isQuickMatchSearching = false;
@@ -812,7 +1178,7 @@ export class OnlineMultiplayerModel {
     } catch (_) {}
 
     announceHost();
-    this.qmAnnounceTimer = setInterval(announceHost, 2200);
+    this.qmAnnounceTimer = setInterval(announceHost, 3500);
   }
 
   stopQuickMatchLobbyWatch() {
@@ -905,7 +1271,6 @@ export class OnlineMultiplayerModel {
       const raw = localStorage.getItem('py_quickmatch_waiting');
       if (!raw) return null;
       const data = JSON.parse(raw);
-      // Expira em 45 segundos
       if (Date.now() - data.timestamp > 45000) {
         localStorage.removeItem('py_quickmatch_waiting');
         return null;
@@ -939,19 +1304,24 @@ export class OnlineMultiplayerModel {
     }
   }
 
+  // =========================================================================
+  // PROTOCOLO DE ENTREGA CONFIÁVEL (ORDENAÇÃO seqId + ACK + REENVIO)
+  // =========================================================================
+
   /**
    * Envia uma ação de turno (ROLL, MOVE, CHALLENGE_START, CHALLENGE_RESULT, TILE_EFFECT, END_TURN, REMATCH)
-   * com número de sequência único (seqId) nas 3 camadas para nunca perder eventos.
+   * com número de sequência estrito (seqId), confirmação (ACK) e reenvio automático.
    */
   async sendTurnAction(actionType, payload) {
     if (!this.connected || !this.roomCode) return;
 
     this.outgoingSeqId += 1;
+    const seqId = this.outgoingSeqId;
     const now = Date.now();
     const action = {
       type: 'PLAYER_ACTION',
-      actionId: `${this.playerRole}_${this.outgoingSeqId}_${now}`,
-      seqId: this.outgoingSeqId,
+      actionId: `${this.playerRole}_${seqId}_${now}`,
+      seqId,
       actionName: actionType,
       roomCode: this.roomCode,
       senderRole: this.playerRole,
@@ -961,22 +1331,355 @@ export class OnlineMultiplayerModel {
     };
 
     this.processedActionIds.add(action.actionId);
+    this.sentActionHistory.set(seqId, action);
+    if (this.sentActionHistory.size > 60) {
+      const oldestKey = this.sentActionHistory.keys().next().value;
+      this.sentActionHistory.delete(oldestKey);
+    }
 
-    // 1. Envia via WebRTC DataChannel
-    this.sendRawWebRTC(action);
+    this.unackedActions.set(seqId, {
+      packet: action,
+      sentAt: now,
+      lastAttemptAt: now,
+      attempts: 1
+    });
 
-    // 2. Envia no BroadcastChannel + Storage Event (para abas locais do mesmo navegador)
+    // 1. BroadcastChannel (abas locais)
     this.broadcastMessage(action);
 
-    // 3. Envia via WebSocket Serverless Relay (para navegadores diferentes quando WebRTC falha)
-    this.sendRoomRelay(action);
+    // 2. WebRTC DataChannel (se aberto, entrega em <50ms sem gastar cota do Relay!)
+    const sentViaWebRTC = this.sendRawWebRTC(action, true);
+
+    // 3. Se WebRTC NÃO está aberto, envia imediatamente via Relay serializado.
+    //    (Se WebRTC estiver aberto, o monitor de ACK fará fallback ao Relay em 2s caso o ACK não chegue.)
+    if (!sentViaWebRTC) {
+      this.sendRoomRelay(action);
+    }
+    this.lastHeartbeatSentAt = now;
+
+    this.startAckRetryMonitor();
   }
 
-  handleIncomingMessage(data) {
+  // =========================================================================
+  // PRESENÇA DO OPONENTE (SAÍDA EXPLÍCITA + HEARTBEAT / DETECÇÃO DE QUEDA)
+  // =========================================================================
+
+  startPresenceMonitor() {
+    this.stopPresenceMonitor();
+    this.lastOpponentSeenAt = Date.now();
+    this.lastHeartbeatSentAt = Date.now();
+    this.opponentPresenceState = 'online';
+    this.hasSentLeaveSignal = false;
+
+    this.presenceTimer = setInterval(() => {
+      this.checkOpponentPresence();
+    }, 5000);
+  }
+
+  stopPresenceMonitor() {
+    if (this.presenceTimer) {
+      clearInterval(this.presenceTimer);
+      this.presenceTimer = null;
+    }
+  }
+
+  markOpponentSeen() {
+    if (!this.connected || !this.roomCode) return;
+    this.lastOpponentSeenAt = Date.now();
+    if (this.opponentPresenceState !== 'online') {
+      this.opponentPresenceState = 'online';
+      this.notifyListeners({
+        type: 'OPPONENT_PRESENCE',
+        state: 'online',
+        reconnected: true,
+        roomCode: this.roomCode
+      });
+    }
+  }
+
+  checkOpponentPresence(now = Date.now()) {
+    if (!this.connected || !this.roomCode || this.opponentPresenceState === 'left') return;
+    // No Host, só monitora presença depois que um oponente entrou na sala
+    if (this.playerRole === 'host' && !this.hasAcceptedGuest) return;
+
+    const p2pOpen = this.isWebRTCOpen();
+    const silentMs = this.lastOpponentSeenAt > 0 ? (now - this.lastOpponentSeenAt) : 0;
+    const sinceLastHeartbeat = now - (this.lastHeartbeatSentAt || 0);
+    const heartbeatInterval = p2pOpen ? 5000 : 20000;
+
+    if (sinceLastHeartbeat >= heartbeatInterval) {
+      this.lastHeartbeatSentAt = now;
+      const ping = {
+        type: 'PRESENCE_PING',
+        roomCode: this.roomCode,
+        senderRole: this.playerRole,
+        senderTabId: this.tabId,
+        needsPong: silentMs >= 20000,
+        timestamp: now
+      };
+      this.broadcastMessage(ping);
+      const sentWebRTC = this.sendRawWebRTC(ping, false);
+      if (!sentWebRTC) {
+        this.sendRoomRelay(ping, { immediate: true, maxRetries: 0 });
+      }
+    }
+
+    const disconnectThreshold = p2pOpen ? 18000 : 45000;
+    const unstableThreshold = p2pOpen ? 10000 : 25000;
+
+    if (silentMs >= disconnectThreshold && this.opponentPresenceState !== 'disconnected') {
+      this.opponentPresenceState = 'disconnected';
+      this.notifyListeners({
+        type: 'OPPONENT_PRESENCE',
+        state: 'disconnected',
+        reason: 'timeout',
+        silentMs,
+        roomCode: this.roomCode
+      });
+    } else if (
+      silentMs >= unstableThreshold &&
+      silentMs < disconnectThreshold &&
+      this.opponentPresenceState === 'online'
+    ) {
+      this.opponentPresenceState = 'unstable';
+      this.notifyListeners({
+        type: 'OPPONENT_PRESENCE',
+        state: 'unstable',
+        reason: 'slow',
+        silentMs,
+        roomCode: this.roomCode
+      });
+    }
+  }
+
+  notifyPlayerLeft(isUnload = false) {
+    if (!this.connected || !this.roomCode || this.hasSentLeaveSignal) return;
+    if (this.playerRole === 'host' && !this.hasAcceptedGuest) return;
+
+    this.hasSentLeaveSignal = true;
+    const leavePacket = {
+      type: 'PLAYER_LEFT',
+      roomCode: this.roomCode,
+      senderRole: this.playerRole,
+      senderTabId: this.tabId,
+      timestamp: Date.now()
+    };
+
+    this.sendRawWebRTC(leavePacket, false);
+    this.broadcastMessage(leavePacket);
+
+    const topic = this.getRelayRoomTopic(this.roomCode);
+    const body = JSON.stringify({ ...leavePacket, sentAt: Date.now() });
+
+    if (isUnload && typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
+      try {
+        const blob = new Blob([body], { type: 'text/plain;charset=UTF-8' });
+        const queued = navigator.sendBeacon(`https://ntfy.sh/${topic}`, blob);
+        if (queued) return;
+      } catch (_) {}
+    }
+
+    if (typeof fetch !== 'undefined') {
+      try {
+        fetch(`https://ntfy.sh/${topic}`, {
+          method: 'POST',
+          keepalive: true,
+          headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+          body
+        }).catch(() => {});
+      } catch (_) {}
+    }
+  }
+
+  startAckRetryMonitor() {
+    if (this.ackRetryTimer) return;
+    this.ackRetryTimer = setInterval(() => {
+      this.retryPendingUnackedActions(false);
+    }, 2200);
+  }
+
+  retryPendingUnackedActions(forceImmediate = false) {
+    if (!this.connected || !this.roomCode || this.unackedActions.size === 0) return;
+    const now = Date.now();
+
+    // Reenvia sempre em ordem crescente de seqId
+    const pendingEntries = Array.from(this.unackedActions.entries()).sort((a, b) => a[0] - b[0]);
+    for (const [seqId, entry] of pendingEntries) {
+      const waitMs = entry.attempts === 1 ? 2200 : 3800;
+      if (!forceImmediate && now - entry.lastAttemptAt < waitMs) continue;
+
+      if (entry.attempts >= 7) {
+        this.unackedActions.delete(seqId);
+        continue;
+      }
+
+      entry.attempts += 1;
+      entry.lastAttemptAt = now;
+
+      this.sendRawWebRTC(entry.packet, false);
+      this.broadcastMessage(entry.packet);
+      this.sendRoomRelay(entry.packet);
+    }
+  }
+
+  sendActionAck(maxSeqId, sourceTransport = 'relay') {
+    if (!this.connected || !this.roomCode || !maxSeqId) return;
+    const ackPacket = {
+      type: 'ACTION_ACK',
+      roomCode: this.roomCode,
+      senderRole: this.playerRole,
+      senderTabId: this.tabId,
+      maxReceivedSeqId: maxSeqId,
+      timestamp: Date.now()
+    };
+
+    // ACK imediato nos canais sem custo (local + WebRTC)
+    this.broadcastMessage(ackPacket);
+    const sentWebRTC = this.sendRawWebRTC(ackPacket, false);
+
+    // No Relay, consolida ACKs em janela de 350ms para economizar cota de POST do ntfy.sh
+    if (!sentWebRTC && sourceTransport === 'relay') {
+      this.pendingRelayAckSeq = Math.max(this.pendingRelayAckSeq, maxSeqId);
+      if (!this.relayAckDebounceTimer) {
+        this.relayAckDebounceTimer = setTimeout(() => {
+          this.relayAckDebounceTimer = null;
+          const seqToAck = this.pendingRelayAckSeq;
+          this.pendingRelayAckSeq = 0;
+          if (seqToAck > 0 && this.connected && this.roomCode && !this.isWebRTCOpen()) {
+            this.sendRoomRelay({
+              type: 'ACTION_ACK',
+              senderRole: this.playerRole,
+              maxReceivedSeqId: seqToAck,
+              timestamp: Date.now()
+            });
+          }
+        }, 350);
+      }
+    }
+  }
+
+  handleActionAck(maxReceivedSeqId) {
+    if (typeof maxReceivedSeqId !== 'number' || maxReceivedSeqId <= 0) return;
+    for (const seqId of Array.from(this.unackedActions.keys())) {
+      if (seqId <= maxReceivedSeqId) {
+        this.unackedActions.delete(seqId);
+      }
+    }
+  }
+
+  requestResendFrom(fromSeqId) {
+    if (!this.connected || !this.roomCode) return;
+    const req = {
+      type: 'RESEND_REQUEST',
+      roomCode: this.roomCode,
+      senderRole: this.playerRole,
+      senderTabId: this.tabId,
+      fromSeqId,
+      timestamp: Date.now()
+    };
+    this.broadcastMessage(req);
+    const sentWebRTC = this.sendRawWebRTC(req, false);
+    if (!sentWebRTC) {
+      this.sendRoomRelay(req);
+    }
+  }
+
+  handleResendRequest(fromSeqId) {
+    if (typeof fromSeqId !== 'number' || fromSeqId <= 0) return;
+    const missing = Array.from(this.sentActionHistory.entries())
+      .filter(([seqId]) => seqId >= fromSeqId)
+      .sort((a, b) => a[0] - b[0]);
+
+    for (const [, pkt] of missing) {
+      this.broadcastMessage(pkt);
+      const sentWebRTC = this.sendRawWebRTC(pkt, false);
+      if (!sentWebRTC) {
+        this.sendRoomRelay(pkt);
+      }
+    }
+  }
+
+  /**
+   * Garante entrega estritamente ordenada por seqId ao GameController,
+   * evitando que END_TURN seja processado antes de ROLL ou MOVE.
+   */
+  enqueueRemoteActionOrdered(data, sourceTransport = 'relay') {
+    const seqId = typeof data.seqId === 'number' ? data.seqId : null;
+
+    if (seqId === null) {
+      const uniqueKey = data.actionId || `${data.senderRole}_${data.actionName}_${data.timestamp}`;
+      if (this.processedActionIds.has(uniqueKey)) return;
+      this.processedActionIds.add(uniqueKey);
+      this.notifyListeners({ ...data, type: 'REMOTE_ACTION' });
+      return;
+    }
+
+    // Já processado anteriormente (duplicata de camada paralela ou retry): só reconfirma ACK
+    if (seqId < this.expectedRemoteSeqId) {
+      this.sendActionAck(this.expectedRemoteSeqId - 1, sourceTransport);
+      return;
+    }
+
+    if (!this.remoteReorderBuffer.has(seqId)) {
+      this.remoteReorderBuffer.set(seqId, data);
+    }
+
+    this.drainRemoteReorderBuffer(sourceTransport);
+  }
+
+  drainRemoteReorderBuffer(sourceTransport = 'relay') {
+    let deliveredAny = false;
+    while (this.remoteReorderBuffer.has(this.expectedRemoteSeqId)) {
+      const nextAction = this.remoteReorderBuffer.get(this.expectedRemoteSeqId);
+      this.remoteReorderBuffer.delete(this.expectedRemoteSeqId);
+      this.expectedRemoteSeqId += 1;
+      deliveredAny = true;
+
+      const uniqueKey = nextAction.actionId || `${nextAction.senderRole}_${nextAction.seqId}`;
+      if (!this.processedActionIds.has(uniqueKey)) {
+        this.processedActionIds.add(uniqueKey);
+        this.notifyListeners({ ...nextAction, type: 'REMOTE_ACTION' });
+      }
+    }
+
+    if (deliveredAny) {
+      this.sendActionAck(this.expectedRemoteSeqId - 1, sourceTransport);
+    }
+
+    if (this.reorderGapTimer) {
+      clearTimeout(this.reorderGapTimer);
+      this.reorderGapTimer = null;
+    }
+
+    // Se ainda há ações futuras no buffer aguardando uma lacuna (ex.: seq 3 chegou antes da seq 2),
+    // solicita reenvio após 1.8s e, como rede de segurança final, libera após 6s para nunca travar!
+    if (this.remoteReorderBuffer.size > 0) {
+      const missingSeq = this.expectedRemoteSeqId;
+      this.reorderGapTimer = setTimeout(() => {
+        if (!this.connected || this.remoteReorderBuffer.size === 0) return;
+        if (this.expectedRemoteSeqId === missingSeq) {
+          this.requestResendFrom(missingSeq);
+          this.pollRoomRelayOnce();
+
+          this.reorderGapTimer = setTimeout(() => {
+            if (!this.connected || this.remoteReorderBuffer.size === 0) return;
+            if (this.expectedRemoteSeqId === missingSeq) {
+              const sortedSeqs = Array.from(this.remoteReorderBuffer.keys()).sort((a, b) => a - b);
+              if (sortedSeqs.length > 0) {
+                this.expectedRemoteSeqId = sortedSeqs[0];
+                this.drainRemoteReorderBuffer(sourceTransport);
+              }
+            }
+          }, 4200);
+        }
+      }, 1800);
+    }
+  }
+
+  handleIncomingMessage(data, sourceTransport = 'local') {
     if (!data || typeof data !== 'object') return;
     if (data.senderTabId && data.senderTabId === this.tabId) return;
 
-    // Desempate de QuickMatch entre abas locais
     if (
       data.type === 'QM_HOST_ANNOUNCEMENT' &&
       this.isQuickMatchSearching &&
@@ -994,12 +1697,53 @@ export class OnlineMultiplayerModel {
       this.acceptGuestOnHost(data.guest, data.room || null);
     } else if (data.type === 'P2P_JOIN_ACCEPTED' && this.playerRole === 'guest') {
       this.handleJoinAcceptedOnGuest(data);
+    } else if (data.type === 'PLAYER_LEFT' && data.senderRole !== this.playerRole) {
+      if (this.opponentPresenceState !== 'left') {
+        this.opponentPresenceState = 'left';
+        this.stopPresenceMonitor();
+        this.notifyListeners({
+          type: 'OPPONENT_PRESENCE',
+          state: 'left',
+          reason: 'left',
+          roomCode: this.roomCode
+        });
+      }
+    } else if (data.type === 'PRESENCE_PING' && data.senderRole !== this.playerRole) {
+      this.markOpponentSeen();
+      if (sourceTransport !== 'relay' || data.needsPong) {
+        const pong = {
+          type: 'PRESENCE_PONG',
+          roomCode: this.roomCode,
+          senderRole: this.playerRole,
+          senderTabId: this.tabId,
+          timestamp: Date.now()
+        };
+        this.broadcastMessage(pong);
+        const sentWebRTC = this.sendRawWebRTC(pong, false);
+        if (!sentWebRTC && sourceTransport === 'relay' && data.needsPong) {
+          this.sendRoomRelay(pong, { immediate: true, maxRetries: 0 });
+        }
+      }
+    } else if (data.type === 'PRESENCE_PONG' && data.senderRole !== this.playerRole) {
+      this.markOpponentSeen();
+    } else if (data.type === 'P2P_CHANNEL_READY' && data.senderRole !== this.playerRole) {
+      this.markOpponentSeen();
+      if (typeof data.maxReceivedSeqId === 'number') {
+        this.handleActionAck(data.maxReceivedSeqId);
+        // Se o oponente ficou para trás antes do P2P abrir, reenvia o que falta imediatamente
+        if (data.maxReceivedSeqId < this.outgoingSeqId) {
+          this.handleResendRequest(data.maxReceivedSeqId + 1);
+        }
+      }
+    } else if (data.type === 'ACTION_ACK' && data.senderRole !== this.playerRole) {
+      this.markOpponentSeen();
+      this.handleActionAck(data.maxReceivedSeqId);
+    } else if (data.type === 'RESEND_REQUEST' && data.senderRole !== this.playerRole) {
+      this.markOpponentSeen();
+      this.handleResendRequest(data.fromSeqId);
     } else if (data.type === 'PLAYER_ACTION' && data.senderRole !== this.playerRole) {
-      const uniqueKey = data.actionId || `${data.senderRole}_${data.actionName}_${data.timestamp}`;
-      if (this.processedActionIds.has(uniqueKey)) return;
-      this.processedActionIds.add(uniqueKey);
-
-      this.notifyListeners({ type: 'REMOTE_ACTION', ...data });
+      this.markOpponentSeen();
+      this.enqueueRemoteActionOrdered(data, sourceTransport);
     }
   }
 
@@ -1040,9 +1784,22 @@ export class OnlineMultiplayerModel {
   }
 
   cleanupPeers() {
+    this.stopPresenceMonitor();
     if (this.joinRetryTimer) {
       clearInterval(this.joinRetryTimer);
       this.joinRetryTimer = null;
+    }
+    if (this.peerConnectRetryTimer) {
+      clearTimeout(this.peerConnectRetryTimer);
+      this.peerConnectRetryTimer = null;
+    }
+    if (this.reorderGapTimer) {
+      clearTimeout(this.reorderGapTimer);
+      this.reorderGapTimer = null;
+    }
+    if (this.relayAckDebounceTimer) {
+      clearTimeout(this.relayAckDebounceTimer);
+      this.relayAckDebounceTimer = null;
     }
     this.stopQuickMatchLobbyWatch();
     this.closeRoomRelay();
@@ -1067,12 +1824,17 @@ export class OnlineMultiplayerModel {
   }
 
   leaveRoom() {
+    this.notifyPlayerLeft(false);
     this.cancelQuickMatch();
     this.cleanupPeers();
+    this.resetSessionSequencing();
     this.connected = false;
     this.hasAcceptedGuest = false;
     this.roomCode = null;
     this.currentRoomState = null;
     this.playerRole = null;
+    this.pendingGuestProfile = null;
+    this.pendingJoinResolve = null;
+    this.updateConnectionStatus();
   }
 }

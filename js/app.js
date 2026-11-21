@@ -10,21 +10,21 @@ import { BlockProgramModel } from './models/BlockProgramModel.js?v=0.4.9';
 import { BotModel } from './models/BotModel.js?v=0.4.1';
 import { ChallengeModel } from './models/ChallengeModel.js?v=0.4.1';
 import { UserProfileModel } from './models/UserProfileModel.js?v=0.4.1';
-import { OnlineMultiplayerModel } from './models/OnlineMultiplayerModel.js?v=0.4.1';
+import { OnlineMultiplayerModel } from './models/OnlineMultiplayerModel.js?v=0.4.11';
 
 import { BoardView } from './views/BoardView.js?v=0.4.1';
 import { DiceView } from './views/DiceView.js?v=0.4.1';
 import { BlockWorkspaceView } from './views/BlockWorkspaceView.js?v=0.4.9';
 import { ChallengeModalView } from './views/ChallengeModalView.js?v=0.4.9';
 import { ChallengeCardsView } from './views/ChallengeCardsView.js?v=0.4.1';
-import { StatusPanelView } from './views/StatusPanelView.js?v=0.4.3';
+import { StatusPanelView } from './views/StatusPanelView.js?v=0.4.11';
 import { SoundView } from './views/SoundView.js?v=0.4.1';
 import { HomeView } from './views/HomeView.js?v=0.4.9';
 import { TutorialView } from './views/TutorialView.js?v=0.4.9';
 
 import { CodingController } from './controllers/CodingController.js?v=0.4.9';
 import { ChallengeController } from './controllers/ChallengeController.js?v=0.4.9';
-import { GameController } from './controllers/GameController.js?v=0.4.9';
+import { GameController } from './controllers/GameController.js?v=0.4.11';
 
 document.addEventListener('DOMContentLoaded', () => {
   // 1. Instanciação dos Models

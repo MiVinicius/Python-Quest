@@ -16,6 +16,7 @@ export class StatusPanelView {
     this.consoleLogsEl = null;
     this.gameOverModal = null;
     this.githubModal = null;
+    this.disconnectModal = null;
 
     this.onRestartCallback = null;
     this.onReturnHomeCallback = null;
@@ -179,6 +180,42 @@ export class StatusPanelView {
         this.githubModal.classList.remove('hidden');
       });
     }
+
+    // Modal de Aviso de Desconexão / Saída do Oponente (Multiplayer Online)
+    let discModal = document.getElementById('opponentDisconnectModalOverlay');
+    if (!discModal) {
+      discModal = document.createElement('div');
+      discModal.id = 'opponentDisconnectModalOverlay';
+      discModal.className = 'modal-overlay hidden';
+      discModal.innerHTML = `
+        <div class="modal-card disconnect-card" role="dialog" aria-modal="true" aria-labelledby="disconnectModalTitle">
+          <div class="disconnect-icon" id="disconnectModalIcon">🔌</div>
+          <h2 class="modal-title" id="disconnectModalTitle">Oponente Desconectado</h2>
+          <p class="modal-subtitle" id="disconnectModalSubtitle">O outro jogador perdeu a conexão ou saiu da partida.</p>
+          <div class="modal-actions" style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+            <button type="button" id="disconnectKeepWaitingBtn" class="btn-ghost btn-sm">⏳ Continuar Aguardando</button>
+            <button type="button" id="disconnectReturnHomeBtn" class="btn-primary">🏠 Voltar ao Menu Inicial</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(discModal);
+    }
+    this.disconnectModal = discModal;
+
+    const keepWaitingBtn = document.getElementById('disconnectKeepWaitingBtn');
+    if (keepWaitingBtn) {
+      keepWaitingBtn.addEventListener('click', () => {
+        this.hideOpponentDisconnected();
+      });
+    }
+
+    const discReturnHomeBtn = document.getElementById('disconnectReturnHomeBtn');
+    if (discReturnHomeBtn) {
+      discReturnHomeBtn.addEventListener('click', () => {
+        this.hideOpponentDisconnected();
+        if (this.onReturnHomeCallback) this.onReturnHomeCallback();
+      });
+    }
   }
 
   updateProgress(playerPos, botPos, total = 64) {
@@ -215,7 +252,7 @@ export class StatusPanelView {
     }
   }
 
-  updateStatusBadges(playerBoost, playerStun, botStun, isOnline = false, botBoost = 0) {
+  updateStatusBadges(playerBoost, playerStun, botStun, isOnline = false, botBoost = 0, opponentPresence = 'online') {
     if (this.playerStatusBadge) {
       if (playerStun) {
         this.playerStatusBadge.textContent = '⛔ Stunned (Perde Turno)';
@@ -230,7 +267,16 @@ export class StatusPanelView {
     }
 
     if (this.botStatusBadge) {
-      if (botStun) {
+      if (isOnline && opponentPresence === 'left') {
+        this.botStatusBadge.textContent = '🚪 Saiu da sala';
+        this.botStatusBadge.className = 'badge-status badge-stun';
+      } else if (isOnline && opponentPresence === 'disconnected') {
+        this.botStatusBadge.textContent = '🔴 Desconectado';
+        this.botStatusBadge.className = 'badge-status badge-stun';
+      } else if (isOnline && opponentPresence === 'unstable') {
+        this.botStatusBadge.textContent = '🟡 Sem resposta...';
+        this.botStatusBadge.className = 'badge-status badge-boost';
+      } else if (botStun) {
         this.botStatusBadge.textContent = '⛔ Travado';
         this.botStatusBadge.className = 'badge-status badge-stun';
       } else if (botBoost > 0) {
@@ -243,6 +289,34 @@ export class StatusPanelView {
         this.botStatusBadge.textContent = '🟢 Operacional';
         this.botStatusBadge.className = 'badge-status badge-normal';
       }
+    }
+  }
+
+  showOpponentDisconnected({ name = 'Oponente', reason = 'timeout' } = {}) {
+    if (!this.disconnectModal) return;
+    const iconEl = document.getElementById('disconnectModalIcon');
+    const titleEl = document.getElementById('disconnectModalTitle');
+    const subEl = document.getElementById('disconnectModalSubtitle');
+    const waitBtn = document.getElementById('disconnectKeepWaitingBtn');
+
+    if (reason === 'left') {
+      if (iconEl) iconEl.textContent = '🚪';
+      if (titleEl) titleEl.textContent = `${name} saiu da partida`;
+      if (subEl) subEl.textContent = `${name} saiu da sala ou fechou o navegador. Você pode retornar ao Menu Inicial para iniciar outra partida.`;
+      if (waitBtn) waitBtn.textContent = 'Fechar aviso';
+    } else {
+      if (iconEl) iconEl.textContent = '🔌';
+      if (titleEl) titleEl.textContent = `${name} parece desconectado`;
+      if (subEl) subEl.textContent = `Não recebemos sinal de ${name} há mais de 45 segundos. Se a conexão voltar, a partida continuará automaticamente.`;
+      if (waitBtn) waitBtn.textContent = '⏳ Continuar Aguardando';
+    }
+
+    this.disconnectModal.classList.remove('hidden');
+  }
+
+  hideOpponentDisconnected() {
+    if (this.disconnectModal) {
+      this.disconnectModal.classList.add('hidden');
     }
   }
 
