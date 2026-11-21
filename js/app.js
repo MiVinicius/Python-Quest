@@ -279,6 +279,12 @@ document.addEventListener('DOMContentLoaded', () => {
   btnFontIncrease?.addEventListener('click', () => applyFontScale(currentFontScale + STEP_SCALE));
   btnFontReset?.addEventListener('click', () => applyFontScale(DEFAULT_SCALE));
 
+  // Reaplica escala ao entrar/sair de tela cheia ou girar o celular
+  const reapplyScaleOnViewportChange = () => applyFontScale(currentFontScale);
+  document.addEventListener('fullscreenchange', reapplyScaleOnViewportChange);
+  document.addEventListener('webkitfullscreenchange', reapplyScaleOnViewportChange);
+  window.addEventListener('orientationchange', reapplyScaleOnViewportChange);
+
   syncBoardHeightWithLeftPanel();
   window.addEventListener('resize', syncBoardHeightWithLeftPanel);
   if (typeof ResizeObserver !== 'undefined') {
