@@ -2,7 +2,7 @@
 
 **Python Quest** é um jogo de tabuleiro digital educativo que combina corrida em trilha com **programação visual em blocos** traduzida em tempo real para **Python**.
 
-🌐 **Jogue online:** [https://mivinicius.github.io/python-quest/](https://mivinicius.github.io/python-quest/)
+🌐 **Jogue online:** [https://mivinicius.github.io/Python-Quest/](https://mivinicius.github.io/Python-Quest/)
 
 O jogador avança pelo tabuleiro montando pequenos algoritmos (usando loops `for`, condicionais `if`, desvios de armadilhas e escudos `try/except`) com base na energia obtida no dado, além de responder desafios de código Python para ganhar bônus de movimento.
 
